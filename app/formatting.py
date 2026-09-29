@@ -129,3 +129,44 @@ def chunk(text: str, size: int):
         parts.append(text[:cut])
         text = text[cut:].lstrip("\n")
     return parts
+
+
+def _cut(text: str, size: int):
+    """Split `text` into (head, tail) where head is at most `size` characters,
+    breaking on a newline/space near the limit. CRITICAL: head and tail use the
+    SAME cut index, so no character is ever dropped between the two pieces
+    (only the single breaking space/newline at the boundary is consumed). This
+    is what fixes the 'first letter of the next post disappears' bug."""
+    if len(text) <= size:
+        return text, ""
+    cut = text.rfind("\n", 0, size)
+    if cut < size // 2:
+        cut = text.rfind(" ", 0, size)
+    if cut <= 0:
+        cut = size            # no whitespace to break on: hard cut, keep every char
+        head, tail = text[:cut], text[cut:]
+    else:
+        head, tail = text[:cut], text[cut:].lstrip("\n ")
+    return head, tail
+
+
+def paginate(body: str, first_limit: int, later_limit: int, cont_prefix: str = ""):
+    """Split plain `body` into a list of pieces for multi-message delivery.
+
+    - The FIRST piece is at most `first_limit` characters.
+    - Every LATER piece is at most `later_limit` characters and is prefixed
+      with `cont_prefix` (e.g. '(continued\u2026)\n') so readers know it's a
+      continuation.
+    - No content characters are dropped (see `_cut`); only the whitespace at a
+      break point is consumed.
+    """
+    body = body or ""
+    if len(body) <= first_limit:
+        return [body]
+    head, rest = _cut(body, first_limit)
+    parts = [head]
+    avail = max(1, later_limit - len(cont_prefix))
+    while rest:
+        piece, rest = _cut(rest, avail)
+        parts.append(cont_prefix + piece)
+    return parts

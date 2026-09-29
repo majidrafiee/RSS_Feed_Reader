@@ -5,7 +5,10 @@ import time
 
 from telethon.tl.types import MessageMediaWebPage
 
-from app.formatting import chunk, esc, strip_html, strip_source_signature, truncate
+from app.formatting import (
+    chunk, esc, paginate, strip_html, strip_source_signature, truncate,
+)
+from app.i18n import t
 from app.links import post_link
 
 log = logging.getLogger("publisher")
@@ -394,42 +397,48 @@ async def publish_tg(client, dest_chat_id, meta, message):
     first_msg = None
     last_msg = None
     last_html = ""  # the exact HTML of last_msg, needed for a link-safe footer
+    # Continuation marker prepended to every follow-up piece (localized).
+    cont_prefix = t(lang, "continued") + "\n"
+    src_vis = len(strip_html(source_line))
     try:
         if has_file:
-            caption = body + source_line
-            if len(caption) <= 1024:
-                m = await client.send_file(
-                    dest, file=message.media, caption=caption, parse_mode="html"
-                )
-                first_msg = last_msg = m
-                last_html = caption
+            # Caption obeys Telegram's HARD 1024-char limit; overflow spills
+            # into follow-up text messages. paginate() guarantees no character
+            # is dropped at the split (the old body[900:] slice dropped one).
+            if len(body) + src_vis <= 1024:
+                parts = [body]
             else:
-                cap = truncate(body, 900) + source_line
-                m = await client.send_file(
-                    dest, file=message.media, caption=cap, parse_mode="html"
-                )
-                first_msg = last_msg = m
-                last_html = cap
-                rest = body[900:]
-                for part in chunk(rest, 4096):
-                    if part.strip():
-                        last_msg = await client.send_message(
-                            dest, part, parse_mode="html", link_preview=False
-                        )
-                        last_html = part
-                        await asyncio.sleep(0.4)
+                parts = paginate(body, 1024, 4000, cont_prefix)
+            # Source credit rides on the LAST piece so it isn't buried above
+            # the continuation.
+            parts[-1] = parts[-1] + source_line
+            m = await client.send_file(
+                dest, file=message.media, caption=parts[0], parse_mode="html"
+            )
+            first_msg = last_msg = m
+            last_html = parts[0]
+            for part in parts[1:]:
+                if part.strip():
+                    last_msg = await client.send_message(
+                        dest, part, parse_mode="html", link_preview=False
+                    )
+                    last_html = part
+                    await asyncio.sleep(0.4)
         else:
-            parts = chunk(body, 4096)
+            # Plain text posts obey Telegram's HARD 4096-char limit.
+            if len(body) + src_vis <= 4096:
+                parts = [body]
+            else:
+                parts = paginate(body, 4000, 4000, cont_prefix)
+            parts[-1] = parts[-1] + source_line
             for i, part in enumerate(parts):
-                # Append the source line only to the LAST chunk.
-                text = part + (source_line if i == len(parts) - 1 else "")
                 m = await client.send_message(
-                    dest, text, parse_mode="html", link_preview=False
+                    dest, part, parse_mode="html", link_preview=False
                 )
                 if i == 0:
                     first_msg = m
                 last_msg = m
-                last_html = text
+                last_html = part
                 await asyncio.sleep(0.4)
         log.info(
             "%s STEP4 sent OK: first_msg_id=%s last_msg_id=%s",
@@ -584,7 +593,7 @@ async def publish_rss(client, dest_chat_id, meta, entry):
     )
     body = f"<b>{esc(title)}</b>"
     if summary:
-        body += f"\n\n{esc(truncate(summary, 3800))}"
+        body += f"\n\n{esc(truncate(summary, 3900))}"
     if link:
         body += (
             f'\n\n\U0001F517 <a href="{esc(link)}">'
