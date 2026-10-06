@@ -36,6 +36,10 @@ _PHOTO_CREDIT = re.compile("^[\\s\\W_]*[\U0001F4F7\U0001F4F8\U0001F3A5\U0001F5BC
 
 _HTTP_TOKEN = re.compile(r"^https?://", re.IGNORECASE)
 _HANDLE_TOKEN = re.compile(r"^@[A-Za-z0-9_]{3,}$")
+# Anchor-label words that stand in for a hyperlink: Telegram shows the visible
+# anchor text (e.g. 'Link' / '\u0644\u06cc\u0646\u06a9') while the URL itself is stored
+# as an entity, so '@Chan | Link' reads as a pure link line, not real content.
+_LINK_LABELS = {"link", "links", "\u0644\u06cc\u0646\u06a9"}
 # bare domain, optionally with a path: khabaronline.ir/xqrqX, bbc.in/4yAJJ8V,
 # t.me/foo. ASCII-only, so Persian/Arabic words can never match it.
 _DOMAIN_TOKEN = re.compile(
@@ -53,6 +57,8 @@ def _classify_token(tok: str) -> str:
     if not core:
         return "sep"
     low = core.lower()
+    if low in _LINK_LABELS:
+        return "link"
     if _HTTP_TOKEN.match(core) or low.startswith("t.me/"):
         return "link"
     if _HANDLE_TOKEN.match(core) or _DOMAIN_TOKEN.match(core):
