@@ -45,7 +45,8 @@ CREATE TABLE IF NOT EXISTS user_settings (
     skip_forwarded BOOLEAN NOT NULL DEFAULT TRUE,
     show_title         BOOLEAN NOT NULL DEFAULT TRUE,
     link_title         BOOLEAN NOT NULL DEFAULT TRUE,
-    dest_show_username BOOLEAN NOT NULL DEFAULT TRUE
+    dest_show_username BOOLEAN NOT NULL DEFAULT TRUE,
+    ad_filter_enabled  BOOLEAN NOT NULL DEFAULT FALSE
 );
 
 CREATE INDEX IF NOT EXISTS idx_sources_tgchat
@@ -65,6 +66,22 @@ ALTER TABLE sources ADD COLUMN IF NOT EXISTS last_tg_msg_id BIGINT;
 ALTER TABLE sources ADD COLUMN IF NOT EXISTS custom_label TEXT;
 ALTER TABLE sources ADD COLUMN IF NOT EXISTS show_title BOOLEAN;
 ALTER TABLE sources ADD COLUMN IF NOT EXISTS link_title BOOLEAN;
+
+-- Runtime-managed ad filter. The owner adds block phrases / @handles /
+-- #hashtags / words through the bot (never hardcoded); when the toggle is on
+-- we skip matching NEW incoming posts, and a separate confirm-gated action can
+-- delete already-posted ads from the destinations.
+ALTER TABLE user_settings ADD COLUMN IF NOT EXISTS ad_filter_enabled BOOLEAN NOT NULL DEFAULT FALSE;
+CREATE TABLE IF NOT EXISTS ad_filters (
+    id          BIGSERIAL PRIMARY KEY,
+    owner_tg_id BIGINT NOT NULL,
+    pattern     TEXT NOT NULL,
+    created_at  TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_adfilters_owner_pattern
+    ON ad_filters (owner_tg_id, lower(pattern));
+CREATE INDEX IF NOT EXISTS idx_adfilters_owner
+    ON ad_filters (owner_tg_id);
 """
 
 
@@ -146,6 +163,54 @@ async def toggle_link_title(pool, tg_id):
 
 async def toggle_dest_show_username(pool, tg_id):
     return await _toggle_bool(pool, tg_id, "dest_show_username", False)
+
+
+async def toggle_ad_filter_enabled(pool, tg_id):
+    # Default OFF, so the first tap turns it ON (insert TRUE for a new row).
+    return await _toggle_bool(pool, tg_id, "ad_filter_enabled", True)
+
+
+async def add_ad_filter(pool, owner, pattern):
+    """Store one block phrase/@handle/#hashtag/word for this owner. Returns the
+    new row, or None if it was blank or already present (case-insensitive)."""
+    pattern = (pattern or "").strip()
+    if not pattern:
+        return None
+    async with pool.acquire() as con:
+        return await con.fetchrow(
+            "INSERT INTO ad_filters (owner_tg_id, pattern) VALUES ($1, $2) "
+            "ON CONFLICT (owner_tg_id, lower(pattern)) DO NOTHING "
+            "RETURNING *",
+            owner, pattern,
+        )
+
+
+async def list_ad_filters(pool, owner):
+    async with pool.acquire() as con:
+        return await con.fetch(
+            "SELECT * FROM ad_filters WHERE owner_tg_id = $1 ORDER BY id",
+            owner,
+        )
+
+
+async def delete_ad_filter(pool, owner, filter_id):
+    async with pool.acquire() as con:
+        return await con.fetchrow(
+            "DELETE FROM ad_filters WHERE id = $1 AND owner_tg_id = $2 "
+            "RETURNING *",
+            filter_id, owner,
+        )
+
+
+async def get_ad_patterns(pool, owner):
+    """Plain list of this owner's block patterns (used to gate new posts)."""
+    if owner is None:
+        return []
+    async with pool.acquire() as con:
+        rows = await con.fetch(
+            "SELECT pattern FROM ad_filters WHERE owner_tg_id = $1", owner
+        )
+    return [r["pattern"] for r in rows]
 
 
 # ---------- destinations ----------
@@ -346,6 +411,8 @@ async def destinations_for_tg_source(pool, tg_chat_id):
             "       COALESCE(s.show_title, us.show_title, TRUE) AS show_title, "
             "       COALESCE(s.link_title, us.link_title, TRUE) AS link_title, "
             "       COALESCE(us.dest_show_username, TRUE) AS dest_show_username, "
+            "       d.owner_tg_id AS owner_tg_id, "
+            "       COALESCE(us.ad_filter_enabled, FALSE) AS ad_filter_enabled, "
             "       COALESCE(us.language, 'en') AS owner_lang "
             "FROM sources s JOIN destinations d ON d.id = s.destination_id "
             "LEFT JOIN user_settings us ON us.tg_user_id = d.owner_tg_id "
@@ -370,6 +437,8 @@ async def all_tg_sources(pool):
             "       COALESCE(s.show_title, us.show_title, TRUE) AS show_title, "
             "       COALESCE(s.link_title, us.link_title, TRUE) AS link_title, "
             "       COALESCE(us.dest_show_username, TRUE) AS dest_show_username, "
+            "       d.owner_tg_id AS owner_tg_id, "
+            "       COALESCE(us.ad_filter_enabled, FALSE) AS ad_filter_enabled, "
             "       COALESCE(us.language, 'en') AS owner_lang "
             "FROM sources s JOIN destinations d ON d.id = s.destination_id "
             "LEFT JOIN user_settings us ON us.tg_user_id = d.owner_tg_id "
@@ -400,6 +469,8 @@ async def all_rss_sources(pool):
             "       COALESCE(s.show_title, us.show_title, TRUE) AS show_title, "
             "       COALESCE(s.link_title, us.link_title, TRUE) AS link_title, "
             "       COALESCE(us.dest_show_username, TRUE) AS dest_show_username, "
+            "       d.owner_tg_id AS owner_tg_id, "
+            "       COALESCE(us.ad_filter_enabled, FALSE) AS ad_filter_enabled, "
             "       COALESCE(us.language, 'en') AS owner_lang "
             "FROM sources s JOIN destinations d ON d.id = s.destination_id "
             "LEFT JOIN user_settings us ON us.tg_user_id = d.owner_tg_id "

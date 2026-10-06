@@ -12,9 +12,11 @@ from telethon import utils
 from telethon.tl.functions.channels import JoinChannelRequest
 
 from app import db, scheduling
-from app.formatting import esc
+from app.formatting import esc, matches_ad_filter
 from app.i18n import t
 from app.keyboards import (
+    ad_clean_confirm_kb,
+    ad_filter_kb,
     destinations_kb,
     dests_manage_kb,
     interval_kb,
@@ -67,6 +69,10 @@ class AddSource(StatesGroup):
 
 class EditSourceName(StatesGroup):
     waiting_name = State()
+
+
+class AddFilter(StatesGroup):
+    waiting_input = State()
 
 
 async def _lang(pool, tg_id, fallback="en"):
@@ -562,3 +568,154 @@ async def cb_lang_chosen(cb: CallbackQuery, pool):
     row = await db.get_settings(pool, cb.from_user.id)
     await _safe_edit(cb, t(new_lang, "settings_title"), reply_markup=settings_kb(row, new_lang))
     await cb.answer(t(new_lang, "saved"))
+
+
+# ---------------------------------------------------------------------------
+# Ad filter: user-managed block list (words / @handles / #hashtags) that skips
+# matching NEW posts when enabled, plus a separate confirm-gated action to
+# delete already-posted ads from the destination channels.
+# ---------------------------------------------------------------------------
+
+
+async def _ad_filter_view(pool, owner, lang):
+    """Build the ad-filter menu text + keyboard for this owner."""
+    settings = await db.get_settings(pool, owner)
+    filters = await db.list_ad_filters(pool, owner)
+    status = t(lang, "on") if settings["ad_filter_enabled"] else t(lang, "off")
+    hint = "" if filters else t(lang, "ad_filter_hint_empty")
+    text = t(lang, "ad_filter_title", status=status, hint=hint)
+    return text, ad_filter_kb(settings, filters, lang)
+
+
+@router.callback_query(F.data == "ad_filter")
+async def cb_ad_filter(cb: CallbackQuery, state: FSMContext, pool):
+    await state.clear()
+    lang = await _lang(pool, cb.from_user.id)
+    text, kb = await _ad_filter_view(pool, cb.from_user.id, lang)
+    await _safe_edit(cb, text, reply_markup=kb)
+    await cb.answer()
+
+
+@router.callback_query(F.data == "ad_toggle")
+async def cb_ad_toggle(cb: CallbackQuery, pool):
+    await db.toggle_ad_filter_enabled(pool, cb.from_user.id)
+    lang = await _lang(pool, cb.from_user.id)
+    text, kb = await _ad_filter_view(pool, cb.from_user.id, lang)
+    await _safe_edit(cb, text, reply_markup=kb)
+    await cb.answer(t(lang, "saved"))
+
+
+@router.callback_query(F.data == "ad_add")
+async def cb_ad_add(cb: CallbackQuery, state: FSMContext, pool):
+    lang = await _lang(pool, cb.from_user.id)
+    await state.set_state(AddFilter.waiting_input)
+    await _safe_edit(
+        cb, t(lang, "ad_add_prompt"),
+        reply_markup=nav_kb(lang, back_to="ad_filter"),
+    )
+    await cb.answer()
+
+
+@router.message(AddFilter.waiting_input)
+async def on_ad_filter_input(message: Message, state: FSMContext, pool):
+    await state.clear()
+    lang = await _lang(pool, message.from_user.id)
+    raw = (message.text or "").strip()
+    added = 0
+    for line in raw.splitlines():
+        pat = line.strip()
+        if not pat:
+            continue
+        row = await db.add_ad_filter(pool, message.from_user.id, pat)
+        if row is not None:
+            added += 1
+    if added:
+        await message.answer(t(lang, "ad_added", count=added))
+    else:
+        await message.answer(t(lang, "ad_added_none"))
+    text, kb = await _ad_filter_view(pool, message.from_user.id, lang)
+    await message.answer(text, reply_markup=kb)
+
+
+@router.callback_query(F.data.startswith("ad_del:"))
+async def cb_ad_del(cb: CallbackQuery, pool):
+    lang = await _lang(pool, cb.from_user.id)
+    filter_id = int(cb.data.split(":", 1)[1])
+    row = await db.delete_ad_filter(pool, cb.from_user.id, filter_id)
+    text, kb = await _ad_filter_view(pool, cb.from_user.id, lang)
+    await _safe_edit(cb, text, reply_markup=kb)
+    if row is not None:
+        await cb.answer(t(lang, "ad_deleted", pattern=row["pattern"]))
+    else:
+        await cb.answer()
+
+
+@router.callback_query(F.data == "ad_clean")
+async def cb_ad_clean(cb: CallbackQuery, pool):
+    lang = await _lang(pool, cb.from_user.id)
+    patterns = await db.get_ad_patterns(pool, cb.from_user.id)
+    if not patterns:
+        await cb.answer(t(lang, "ad_clean_none_patterns"), show_alert=True)
+        return
+    await _safe_edit(
+        cb, t(lang, "ad_clean_confirm"),
+        reply_markup=ad_clean_confirm_kb(lang),
+    )
+    await cb.answer()
+
+
+@router.callback_query(F.data == "ad_clean_yes")
+async def cb_ad_clean_yes(cb: CallbackQuery, pool, client):
+    owner = cb.from_user.id
+    lang = await _lang(pool, owner)
+    patterns = await db.get_ad_patterns(pool, owner)
+    if not patterns:
+        await cb.answer(t(lang, "ad_clean_none_patterns"), show_alert=True)
+        return
+    await _safe_edit(cb, t(lang, "ad_clean_running"))
+    await cb.answer()
+    # Scan the recent history of each destination and delete matching posts.
+    scan_limit = 500
+    total = 0
+    for d in await db.list_destinations(pool, owner):
+        try:
+            ent = await resolve_dest(client, d["chat_id"], d.get("username"))
+        except Exception as exc:  # noqa: BLE001
+            log.warning("ad-clean: cannot resolve dest %s: %s", d["chat_id"], exc)
+            continue
+        groups = {}
+        matched_ids = set()
+        matched_groups = set()
+        try:
+            async for m in client.iter_messages(ent, limit=scan_limit):
+                gid = getattr(m, "grouped_id", None)
+                if gid is not None:
+                    groups.setdefault(gid, []).append(m.id)
+                if matches_ad_filter(m.message or "", patterns):
+                    if gid is not None:
+                        matched_groups.add(gid)
+                    else:
+                        matched_ids.add(m.id)
+        except Exception as exc:  # noqa: BLE001
+            log.warning("ad-clean: scan failed for %s: %s", d["chat_id"], exc)
+            continue
+        # Delete whole albums when their caption-bearing item matched.
+        for gid in matched_groups:
+            matched_ids.update(groups.get(gid, []))
+        ids = sorted(matched_ids)
+        for i in range(0, len(ids), 100):
+            chunk = ids[i:i + 100]
+            try:
+                await client.delete_messages(ent, chunk)
+                total += len(chunk)
+            except Exception as exc:  # noqa: BLE001
+                log.warning(
+                    "ad-clean: delete failed for %s: %s", d["chat_id"], exc
+                )
+    done = (
+        t(lang, "ad_clean_done", n=total) if total
+        else t(lang, "ad_clean_nomatch")
+    )
+    await cb.message.answer(done)
+    text, kb = await _ad_filter_view(pool, owner, lang)
+    await cb.message.answer(text, reply_markup=kb)

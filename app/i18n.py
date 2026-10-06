@@ -108,6 +108,40 @@ T = {
         ),
         "source_name_saved": "\u2705 Source name changed to: <b>{name}</b>",
         "source_name_reset": "\u267B\uFE0F Source name reset to default: <b>{name}</b>",
+        "btn_ad_filter": "\U0001F9F9 Ad filter",
+        "btn_ad_on": "\U0001F7E2 Ad filter: ON",
+        "btn_ad_off": "\u26AA Ad filter: OFF",
+        "btn_ad_add": "\u2795 Add block word / @handle / #hashtag",
+        "btn_ad_item": "\U0001F5D1 {pattern}",
+        "btn_ad_clean": "\U0001F9FD Clean existing ads",
+        "btn_ad_clean_yes": "\u2705 Yes, delete them",
+        "btn_ad_clean_no": "\u2B05\uFE0F No, go back",
+        "ad_filter_title": (
+            "\U0001F9F9 <b>Ad filter</b>\n\n"
+            "Status: <b>{status}</b>\n\n"
+            "When ON, any <b>new</b> incoming post that contains one of your "
+            "block words, <code>@handles</code> or <code>#hashtags</code> is "
+            "skipped. Tap a pattern below to remove it.{hint}"
+        ),
+        "ad_filter_hint_empty": "\n\n<i>No block patterns yet \u2014 tap Add.</i>",
+        "ad_add_prompt": (
+            "Send the word, phrase, <code>@handle</code> or <code>#hashtag</code> "
+            "to block.\n\n<i>You can send several at once, one per line.</i>"
+        ),
+        "ad_added": "\u2705 Added {count} block pattern(s).",
+        "ad_added_none": "Nothing added (blank or already in the list).",
+        "ad_deleted": "\U0001F5D1 Removed: <b>{pattern}</b>",
+        "ad_clean_confirm": (
+            "\u26A0\uFE0F <b>Delete existing ads?</b>\n\n"
+            "I'll scan the recent history of your destination channel(s) and "
+            "<b>permanently delete</b> every post that matches your block "
+            "patterns. This cannot be undone.\n\n"
+            "Do you want me to continue?"
+        ),
+        "ad_clean_none_patterns": "Add at least one block pattern first.",
+        "ad_clean_running": "\u23F3 Scanning your channels and deleting matching ads\u2026",
+        "ad_clean_done": "\u2705 Deleted <b>{n}</b> ad post(s) from your channel(s).",
+        "ad_clean_nomatch": "\u2705 Scan complete \u2014 no matching posts found.",
         "on": "ON",
         "off": "OFF",
     },
@@ -216,6 +250,25 @@ T = {
         ),
         "source_name_saved": "\u2705 \u0646\u0627\u0645 \u0645\u0646\u0628\u0639 \u062A\u063A\u06CC\u06CC\u0631 \u06A9\u0631\u062F \u0628\u0647: <b>{name}</b>",
         "source_name_reset": "\u267B\uFE0F \u0646\u0627\u0645 \u0645\u0646\u0628\u0639 \u0628\u0647 \u067E\u06CC\u0634\u200C\u0641\u0631\u0636 \u0628\u0627\u0632\u06AF\u0634\u062A: <b>{name}</b>",
+        "btn_ad_filter": "\U0001f9f9 \u0641\u06cc\u0644\u062a\u0631 \u062a\u0628\u0644\u06cc\u063a\u0627\u062a",
+        "btn_ad_on": "\U0001f7e2 \u0641\u06cc\u0644\u062a\u0631 \u062a\u0628\u0644\u06cc\u063a\u0627\u062a: \u0631\u0648\u0634\u0646",
+        "btn_ad_off": "\u26aa \u0641\u06cc\u0644\u062a\u0631 \u062a\u0628\u0644\u06cc\u063a\u0627\u062a: \u062e\u0627\u0645\u0648\u0634",
+        "btn_ad_add": "\u2795 \u0627\u0641\u0632\u0648\u062f\u0646 \u06a9\u0644\u0645\u0647/\u200f@\u0622\u06cc\u062f\u06cc/\u200f#\u0647\u0634\u062a\u06af \u0645\u0633\u062f\u0648\u062f",
+        "btn_ad_item": "\U0001f5d1 {pattern}",
+        "btn_ad_clean": "\U0001f9fd \u067e\u0627\u06a9\u200c\u0633\u0627\u0632\u06cc \u062a\u0628\u0644\u06cc\u063a\u0627\u062a \u0645\u0648\u062c\u0648\u062f",
+        "btn_ad_clean_yes": "\u2705 \u0628\u0644\u0647\u060c \u062d\u0630\u0641 \u0634\u0648\u0646\u062f",
+        "btn_ad_clean_no": "\u2b05\ufe0f \u062e\u06cc\u0631\u060c \u0628\u0627\u0632\u06af\u0634\u062a",
+        "ad_filter_title": "\U0001f9f9 <b>\u0641\u06cc\u0644\u062a\u0631 \u062a\u0628\u0644\u06cc\u063a\u0627\u062a</b>\n\n\u0648\u0636\u0639\u06cc\u062a: <b>{status}</b>\n\n\u0648\u0642\u062a\u06cc \u0631\u0648\u0634\u0646 \u0628\u0627\u0634\u062f\u060c \u0647\u0631 \u067e\u0633\u062a <b>\u062c\u062f\u06cc\u062f\u06cc</b> \u06a9\u0647 \u0634\u0627\u0645\u0644 \u06cc\u06a9\u06cc \u0627\u0632 \u06a9\u0644\u0645\u0647\u200c\u0647\u0627\u060c <code>@\u0622\u06cc\u062f\u06cc\u200c\u0647\u0627</code> \u06cc\u0627 <code>#\u0647\u0634\u062a\u06af\u200c\u0647\u0627\u06cc</code> \u0645\u0633\u062f\u0648\u062f \u0634\u0645\u0627 \u0628\u0627\u0634\u062f \u0646\u0627\u062f\u06cc\u062f\u0647 \u06af\u0631\u0641\u062a\u0647 \u0645\u06cc\u200c\u0634\u0648\u062f. \u0628\u0631\u0627\u06cc \u062d\u0630\u0641 \u06cc\u06a9 \u0645\u0648\u0631\u062f \u0631\u0648\u06cc \u0622\u0646 \u0628\u0632\u0646\u06cc\u062f.{hint}",
+        "ad_filter_hint_empty": "\n\n<i>\u0647\u0646\u0648\u0632 \u0645\u0648\u0631\u062f\u06cc \u0627\u0636\u0627\u0641\u0647 \u0646\u0634\u062f\u0647 \u2014 \u0631\u0648\u06cc \u0627\u0641\u0632\u0648\u062f\u0646 \u0628\u0632\u0646\u06cc\u062f.</i>",
+        "ad_add_prompt": "\u06a9\u0644\u0645\u0647\u060c \u0639\u0628\u0627\u0631\u062a\u060c <code>@\u0622\u06cc\u062f\u06cc</code> \u06cc\u0627 <code>#\u0647\u0634\u062a\u06af</code> \u0645\u0648\u0631\u062f\u0646\u0638\u0631 \u0628\u0631\u0627\u06cc \u0645\u0633\u062f\u0648\u062f\u0633\u0627\u0632\u06cc \u0631\u0627 \u0628\u0641\u0631\u0633\u062a\u06cc\u062f.\n\n<i>\u0645\u06cc\u200c\u062a\u0648\u0627\u0646\u06cc\u062f \u0686\u0646\u062f \u0645\u0648\u0631\u062f \u0631\u0627 \u0647\u0645\u200c\u0632\u0645\u0627\u0646\u060c \u0647\u0631 \u06a9\u062f\u0627\u0645 \u062f\u0631 \u06cc\u06a9 \u062e\u0637\u060c \u0628\u0641\u0631\u0633\u062a\u06cc\u062f.</i>",
+        "ad_added": "\u2705 {count} \u0645\u0648\u0631\u062f \u0645\u0633\u062f\u0648\u062f \u0627\u0636\u0627\u0641\u0647 \u0634\u062f.",
+        "ad_added_none": "\u0686\u06cc\u0632\u06cc \u0627\u0636\u0627\u0641\u0647 \u0646\u0634\u062f (\u062e\u0627\u0644\u06cc \u0628\u0648\u062f \u06cc\u0627 \u0627\u0632 \u0642\u0628\u0644 \u062f\u0631 \u0641\u0647\u0631\u0633\u062a \u0628\u0648\u062f).",
+        "ad_deleted": "\U0001f5d1 \u062d\u0630\u0641 \u0634\u062f: <b>{pattern}</b>",
+        "ad_clean_confirm": "\u26a0\ufe0f <b>\u062a\u0628\u0644\u06cc\u063a\u0627\u062a \u0645\u0648\u062c\u0648\u062f \u062d\u0630\u0641 \u0634\u0648\u0646\u062f\u061f</b>\n\n\u062a\u0627\u0631\u06cc\u062e\u0686\u0647 \u0627\u062e\u06cc\u0631 \u06a9\u0627\u0646\u0627\u0644\u200c(\u0647\u0627\u06cc) \u0645\u0642\u0635\u062f \u0634\u0645\u0627 \u0631\u0627 \u0628\u0631\u0631\u0633\u06cc \u0645\u06cc\u200c\u06a9\u0646\u0645 \u0648 \u0647\u0631 \u067e\u0633\u062a\u06cc \u0631\u0627 \u06a9\u0647 \u0628\u0627 \u0627\u0644\u06af\u0648\u0647\u0627\u06cc \u0645\u0633\u062f\u0648\u062f \u0634\u0645\u0627 \u0645\u0637\u0627\u0628\u0642\u062a \u062f\u0627\u0631\u062f <b>\u0628\u0631\u0627\u06cc \u0647\u0645\u06cc\u0634\u0647 \u062d\u0630\u0641</b> \u0645\u06cc\u200c\u06a9\u0646\u0645. \u0627\u06cc\u0646 \u06a9\u0627\u0631 \u0642\u0627\u0628\u0644 \u0628\u0627\u0632\u06af\u0634\u062a \u0646\u06cc\u0633\u062a.\n\n\u0627\u062f\u0627\u0645\u0647 \u0628\u062f\u0647\u0645\u061f",
+        "ad_clean_none_patterns": "\u0627\u0628\u062a\u062f\u0627 \u062d\u062f\u0627\u0642\u0644 \u06cc\u06a9 \u0627\u0644\u06af\u0648\u06cc \u0645\u0633\u062f\u0648\u062f \u0627\u0636\u0627\u0641\u0647 \u06a9\u0646\u06cc\u062f.",
+        "ad_clean_running": "\u23f3 \u062f\u0631 \u062d\u0627\u0644 \u0628\u0631\u0631\u0633\u06cc \u06a9\u0627\u0646\u0627\u0644\u200c\u0647\u0627 \u0648 \u062d\u0630\u0641 \u062a\u0628\u0644\u06cc\u063a\u0627\u062a \u0645\u0646\u0637\u0628\u0642\u2026",
+        "ad_clean_done": "\u2705 \u062a\u0639\u062f\u0627\u062f <b>{n}</b> \u067e\u0633\u062a \u062a\u0628\u0644\u06cc\u063a\u0627\u062a\u06cc \u0627\u0632 \u06a9\u0627\u0646\u0627\u0644\u200c(\u0647\u0627\u06cc) \u0634\u0645\u0627 \u062d\u0630\u0641 \u0634\u062f.",
+        "ad_clean_nomatch": "\u2705 \u0628\u0631\u0631\u0633\u06cc \u06a9\u0627\u0645\u0644 \u0634\u062f \u2014 \u067e\u0633\u062a \u0645\u0646\u0637\u0628\u0642\u06cc \u06cc\u0627\u0641\u062a \u0646\u0634\u062f.",
         "on": "\u0631\u0648\u0634\u0646",
         "off": "\u062E\u0627\u0645\u0648\u0634",
     },

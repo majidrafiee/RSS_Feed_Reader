@@ -4,6 +4,7 @@ import logging
 import feedparser
 
 from app import db
+from app.formatting import matches_ad_filter
 from app.publisher import publish_rss
 
 log = logging.getLogger("rss")
@@ -111,6 +112,21 @@ async def poll_all_feeds(pool, client):
             guid = _guid(entry)
             if not guid or await db.is_seen(pool, src["id"], guid):
                 continue
+            # Runtime ad filter: skip a feed item whose title/summary matches
+            # one of the owner's block patterns.
+            if src["ad_filter_enabled"]:
+                entry_text = " ".join(
+                    str(entry.get(k, "") or "")
+                    for k in ("title", "summary", "description")
+                )
+                patterns = await db.get_ad_patterns(pool, src["owner_tg_id"])
+                if matches_ad_filter(entry_text, patterns):
+                    log.info(
+                        "ad-filter: skip rss item src=%s guid=%s",
+                        src["id"], guid,
+                    )
+                    await db.mark_seen(pool, src["id"], guid)
+                    continue
             try:
                 await publish_rss(client, src["dest_chat_id"], meta, entry)
                 await db.mark_seen(pool, src["id"], guid)

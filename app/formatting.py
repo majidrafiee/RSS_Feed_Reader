@@ -220,3 +220,34 @@ def paginate(body: str, first_limit: int, later_limit: int, cont_prefix: str = "
         piece, rest = _cut(rest, avail)
         parts.append(cont_prefix + piece)
     return parts
+
+
+# ---------------------------------------------------------------------------
+# Runtime ad filter matching.
+#
+# Patterns are managed by the owner through the bot (stored in the DB), not
+# hardcoded. A pattern is matched case-insensitively against the post text:
+#   * "@handle"  -> matched as a whole token (word-bounded), so "@ads" does not
+#                   also hit "@adsmanager".
+#   * "#hashtag" -> same whole-token match.
+#   * anything else (a word or a phrase) -> plain case-insensitive substring.
+# ---------------------------------------------------------------------------
+
+
+def matches_ad_filter(text, patterns) -> bool:
+    """True if `text` matches any of the owner's block `patterns`."""
+    if not text or not patterns:
+        return False
+    low = text.casefold()
+    for pat in patterns:
+        p = (pat or "").strip()
+        if not p:
+            continue
+        pl = p.casefold()
+        if p[0] in "@#":
+            # Whole-token match so "@ad" doesn't also match "@advanced".
+            if re.search(r"(?<!\w)" + re.escape(pl) + r"(?!\w)", low):
+                return True
+        elif pl in low:
+            return True
+    return False

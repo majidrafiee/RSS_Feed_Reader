@@ -4,6 +4,7 @@ import logging
 from telethon import utils
 
 from app import db
+from app.formatting import matches_ad_filter
 from app.publisher import publish_tg, publish_tg_album
 
 log = logging.getLogger("backfill")
@@ -132,6 +133,20 @@ async def _backfill_one(pool, client, chat_id, dest_rows):
             if is_forwarded and r["skip_forwarded"]:
                 await db.update_source_last_msg(pool, r["source_id"], max_id)
                 continue
+            # Runtime ad filter: skip a recovered post/album whose text matches
+            # one of the owner's block patterns.
+            if r["ad_filter_enabled"]:
+                item_text = " ".join(m.message or "" for m in item)
+                patterns = await db.get_ad_patterns(pool, r["owner_tg_id"])
+                if matches_ad_filter(item_text, patterns):
+                    log.info(
+                        "ad-filter: skip backfill src=%s ids=%s-%s -> dest=%s",
+                        chat_id, rep_id, max_id, r["dest_chat_id"],
+                    )
+                    await db.update_source_last_msg(
+                        pool, r["source_id"], max_id
+                    )
+                    continue
             meta = {
                 "source_label": r["source_label"] or live_title,
                 "source_username": r["source_username"] or live_username,

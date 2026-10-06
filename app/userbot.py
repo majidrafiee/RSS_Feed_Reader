@@ -3,6 +3,7 @@ import logging
 from telethon import events, utils
 
 from app import db
+from app.formatting import matches_ad_filter
 from app.publisher import publish_tg, publish_tg_album
 
 log = logging.getLogger("userbot")
@@ -104,6 +105,21 @@ def register_userbot(client, pool):
                     # Advance watermark so the skip doesn't look like a gap.
                     await db.update_source_last_msg(pool, row["source_id"], msg_id)
                     continue
+                # Runtime ad filter: skip a new post whose text matches one of
+                # the owner's block patterns (managed from the bot).
+                if row["ad_filter_enabled"]:
+                    patterns = await db.get_ad_patterns(
+                        pool, row["owner_tg_id"]
+                    )
+                    if matches_ad_filter(event.message.message or "", patterns):
+                        log.info(
+                            "ad-filter: skip post msg=%s from %s -> dest %s",
+                            msg_id, chat_id, row["dest_chat_id"],
+                        )
+                        await db.update_source_last_msg(
+                            pool, row["source_id"], msg_id
+                        )
+                        continue
                 meta = {
                     "source_label": row["source_label"] or live_title,
                     "source_username": row["source_username"] or live_username,
@@ -186,6 +202,22 @@ def register_userbot(client, pool):
                     )
                     await db.update_source_last_msg(pool, row["source_id"], max_id)
                     continue
+                # Runtime ad filter: skip the whole album when its caption
+                # matches one of the owner's block patterns.
+                if row["ad_filter_enabled"]:
+                    album_text = " ".join(m.message or "" for m in msgs)
+                    patterns = await db.get_ad_patterns(
+                        pool, row["owner_tg_id"]
+                    )
+                    if matches_ad_filter(album_text, patterns):
+                        log.info(
+                            "ad-filter: skip album ids=%s-%s from %s -> dest %s",
+                            rep_id, max_id, chat_id, row["dest_chat_id"],
+                        )
+                        await db.update_source_last_msg(
+                            pool, row["source_id"], max_id
+                        )
+                        continue
                 meta = {
                     "source_label": row["source_label"] or live_title,
                     "source_username": row["source_username"] or live_username,

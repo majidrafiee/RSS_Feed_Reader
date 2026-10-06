@@ -151,8 +151,44 @@ def settings_kb(settings, lang: str = "en") -> InlineKeyboardMarkup:
             [InlineKeyboardButton(text=t(lang, show_key), callback_data="toggle_show_title")],
             [InlineKeyboardButton(text=t(lang, link_key), callback_data="toggle_link_title")],
             [InlineKeyboardButton(text=t(lang, du_key), callback_data="toggle_dest_user")],
+            [InlineKeyboardButton(text=t(lang, "btn_ad_filter"), callback_data="ad_filter")],
             [InlineKeyboardButton(text=t(lang, "btn_language"), callback_data="set_lang")],
             [InlineKeyboardButton(text=t(lang, "btn_back"), callback_data="home")],
+        ]
+    )
+
+
+def ad_filter_kb(settings, filters, lang: str = "en") -> InlineKeyboardMarkup:
+    """Ad-filter menu: on/off toggle, add, per-pattern delete buttons, a
+    confirm-gated 'clean existing ads' action, and back."""
+    try:
+        enabled = bool(settings["ad_filter_enabled"])
+    except (KeyError, IndexError):
+        enabled = False
+    toggle_key = "btn_ad_on" if enabled else "btn_ad_off"
+    rows = [
+        [InlineKeyboardButton(text=t(lang, toggle_key), callback_data="ad_toggle")],
+        [InlineKeyboardButton(text=t(lang, "btn_ad_add"), callback_data="ad_add")],
+    ]
+    for f in filters:
+        rows.append([InlineKeyboardButton(
+            text=t(lang, "btn_ad_item", pattern=f["pattern"]),
+            callback_data=f"ad_del:{f['id']}",
+        )])
+    rows.append([InlineKeyboardButton(
+        text=t(lang, "btn_ad_clean"), callback_data="ad_clean")])
+    rows.append([InlineKeyboardButton(
+        text=t(lang, "btn_back"), callback_data="settings")])
+    return InlineKeyboardMarkup(inline_keyboard=rows)
+
+
+def ad_clean_confirm_kb(lang: str = "en") -> InlineKeyboardMarkup:
+    return InlineKeyboardMarkup(
+        inline_keyboard=[
+            [InlineKeyboardButton(
+                text=t(lang, "btn_ad_clean_yes"), callback_data="ad_clean_yes")],
+            [InlineKeyboardButton(
+                text=t(lang, "btn_ad_clean_no"), callback_data="ad_filter")],
         ]
     )
 
