@@ -313,8 +313,11 @@ async def _add_footer(client, dest, msg, footer, base_html=None, tag=""):
     visible = len(strip_html(combined))
     try:
         if visible <= limit:
+            # link_preview=False is CRUCIAL here: the footer/source line carry
+            # a t.me link, and editing WITHOUT it lets Telegram attach a link
+            # preview card (the ugly orange 'Telegram / View Message' box).
             edited = await client.edit_message(
-                dest, msg.id, combined, parse_mode="html"
+                dest, msg.id, combined, parse_mode="html", link_preview=False
             )
             log.info(
                 "%s STEP6 footer edited into msg %s; entities=%s",
