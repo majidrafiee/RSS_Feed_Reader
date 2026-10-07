@@ -4,6 +4,7 @@ import logging
 import feedparser
 
 from app import db
+from app import dedup
 from app.formatting import matches_ad_filter
 from app.publisher import publish_rss
 
@@ -127,6 +128,23 @@ async def poll_all_feeds(pool, client):
                     )
                     await db.mark_seen(pool, src["id"], guid)
                     continue
+            # Near-duplicate suppression across sources sharing a destination.
+            if src["dedup_enabled"] and dedup.is_duplicate(
+                src["dest_chat_id"],
+                " ".join(
+                    str(entry.get(k, "") or "")
+                    for k in ("title", "summary", "description")
+                ),
+                src["dedup_window_min"],
+                src["dedup_threshold"],
+                src["dedup_min_len"],
+            ):
+                log.info(
+                    "dedup: skip rss item src=%s guid=%s",
+                    src["id"], guid,
+                )
+                await db.mark_seen(pool, src["id"], guid)
+                continue
             try:
                 await publish_rss(client, src["dest_chat_id"], meta, entry)
                 await db.mark_seen(pool, src["id"], guid)

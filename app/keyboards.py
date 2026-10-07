@@ -152,6 +152,7 @@ def settings_kb(settings, lang: str = "en") -> InlineKeyboardMarkup:
             [InlineKeyboardButton(text=t(lang, link_key), callback_data="toggle_link_title")],
             [InlineKeyboardButton(text=t(lang, du_key), callback_data="toggle_dest_user")],
             [InlineKeyboardButton(text=t(lang, "btn_ad_filter"), callback_data="ad_filter")],
+            [InlineKeyboardButton(text=t(lang, "btn_dedup"), callback_data="dedup")],
             [InlineKeyboardButton(text=t(lang, "btn_language"), callback_data="set_lang")],
             [InlineKeyboardButton(text=t(lang, "btn_back"), callback_data="home")],
         ]
@@ -191,6 +192,67 @@ def ad_clean_confirm_kb(lang: str = "en") -> InlineKeyboardMarkup:
                 text=t(lang, "btn_ad_clean_no"), callback_data="ad_filter")],
         ]
     )
+
+
+DEDUP_WINDOWS = [15, 30, 60, 180, 360]
+DEDUP_THRESHOLDS = [80, 85, 90, 95]
+DEDUP_MIN_LENS = [10, 20, 40, 80]
+
+
+def _dedup_flag(settings, name, default):
+    try:
+        val = settings[name]
+    except (KeyError, IndexError):
+        return default
+    return default if val is None else val
+
+
+def dedup_kb(settings, lang: str = "en") -> InlineKeyboardMarkup:
+    """Duplicate-filter menu: on/off toggle plus the three tunable knobs
+    (lookback window, similarity threshold, minimum length)."""
+    enabled = bool(_dedup_flag(settings, "dedup_enabled", False))
+    window = _dedup_flag(settings, "dedup_window_min", 30)
+    threshold = _dedup_flag(settings, "dedup_threshold", 90)
+    min_len = _dedup_flag(settings, "dedup_min_len", 20)
+    toggle_key = "btn_dedup_on" if enabled else "btn_dedup_off"
+    rows = [
+        [InlineKeyboardButton(text=t(lang, toggle_key), callback_data="dedup_toggle")],
+        [InlineKeyboardButton(
+            text=t(lang, "btn_dedup_window", min=window),
+            callback_data="dedup_set_window")],
+        [InlineKeyboardButton(
+            text=t(lang, "btn_dedup_threshold", pct=threshold),
+            callback_data="dedup_set_threshold")],
+        [InlineKeyboardButton(
+            text=t(lang, "btn_dedup_minlen", n=min_len),
+            callback_data="dedup_set_minlen")],
+        [InlineKeyboardButton(text=t(lang, "btn_back"), callback_data="settings")],
+    ]
+    return InlineKeyboardMarkup(inline_keyboard=rows)
+
+
+def dedup_window_kb(lang: str = "en") -> InlineKeyboardMarkup:
+    rows = [[InlineKeyboardButton(
+        text=t(lang, "btn_dedup_window_opt", min=m),
+        callback_data=f"dedup_window:{m}")] for m in DEDUP_WINDOWS]
+    rows.append([InlineKeyboardButton(text=t(lang, "btn_back"), callback_data="dedup")])
+    return InlineKeyboardMarkup(inline_keyboard=rows)
+
+
+def dedup_threshold_kb(lang: str = "en") -> InlineKeyboardMarkup:
+    rows = [[InlineKeyboardButton(
+        text=t(lang, "btn_dedup_threshold_opt", pct=p),
+        callback_data=f"dedup_threshold:{p}")] for p in DEDUP_THRESHOLDS]
+    rows.append([InlineKeyboardButton(text=t(lang, "btn_back"), callback_data="dedup")])
+    return InlineKeyboardMarkup(inline_keyboard=rows)
+
+
+def dedup_minlen_kb(lang: str = "en") -> InlineKeyboardMarkup:
+    rows = [[InlineKeyboardButton(
+        text=t(lang, "btn_dedup_minlen_opt", n=n),
+        callback_data=f"dedup_minlen:{n}")] for n in DEDUP_MIN_LENS]
+    rows.append([InlineKeyboardButton(text=t(lang, "btn_back"), callback_data="dedup")])
+    return InlineKeyboardMarkup(inline_keyboard=rows)
 
 
 def interval_kb(lang: str = "en") -> InlineKeyboardMarkup:

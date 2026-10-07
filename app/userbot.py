@@ -3,6 +3,7 @@ import logging
 from telethon import events, utils
 
 from app import db
+from app import dedup
 from app.formatting import matches_ad_filter
 from app.publisher import publish_tg, publish_tg_album
 
@@ -120,6 +121,23 @@ def register_userbot(client, pool):
                             pool, row["source_id"], msg_id
                         )
                         continue
+                # Near-duplicate suppression: drop a post whose text closely
+                # matches something recently published to this destination.
+                if row["dedup_enabled"] and dedup.is_duplicate(
+                    row["dest_chat_id"],
+                    event.message.message or "",
+                    row["dedup_window_min"],
+                    row["dedup_threshold"],
+                    row["dedup_min_len"],
+                ):
+                    log.info(
+                        "dedup: skip post msg=%s from %s -> dest %s",
+                        msg_id, chat_id, row["dest_chat_id"],
+                    )
+                    await db.update_source_last_msg(
+                        pool, row["source_id"], msg_id
+                    )
+                    continue
                 meta = {
                     "source_label": row["source_label"] or live_title,
                     "source_username": row["source_username"] or live_username,
@@ -218,6 +236,22 @@ def register_userbot(client, pool):
                             pool, row["source_id"], max_id
                         )
                         continue
+                # Near-duplicate suppression for the album caption.
+                if row["dedup_enabled"] and dedup.is_duplicate(
+                    row["dest_chat_id"],
+                    " ".join(m.message or "" for m in msgs),
+                    row["dedup_window_min"],
+                    row["dedup_threshold"],
+                    row["dedup_min_len"],
+                ):
+                    log.info(
+                        "dedup: skip album ids=%s-%s from %s -> dest %s",
+                        rep_id, max_id, chat_id, row["dest_chat_id"],
+                    )
+                    await db.update_source_last_msg(
+                        pool, row["source_id"], max_id
+                    )
+                    continue
                 meta = {
                     "source_label": row["source_label"] or live_title,
                     "source_username": row["source_username"] or live_username,

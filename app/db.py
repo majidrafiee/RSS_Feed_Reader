@@ -46,7 +46,11 @@ CREATE TABLE IF NOT EXISTS user_settings (
     show_title         BOOLEAN NOT NULL DEFAULT TRUE,
     link_title         BOOLEAN NOT NULL DEFAULT TRUE,
     dest_show_username BOOLEAN NOT NULL DEFAULT TRUE,
-    ad_filter_enabled  BOOLEAN NOT NULL DEFAULT FALSE
+    ad_filter_enabled  BOOLEAN NOT NULL DEFAULT FALSE,
+    dedup_enabled      BOOLEAN NOT NULL DEFAULT FALSE,
+    dedup_window_min   INT NOT NULL DEFAULT 30,
+    dedup_threshold    INT NOT NULL DEFAULT 90,
+    dedup_min_len      INT NOT NULL DEFAULT 20
 );
 
 CREATE INDEX IF NOT EXISTS idx_sources_tgchat
@@ -82,6 +86,15 @@ CREATE UNIQUE INDEX IF NOT EXISTS idx_adfilters_owner_pattern
     ON ad_filters (owner_tg_id, lower(pattern));
 CREATE INDEX IF NOT EXISTS idx_adfilters_owner
     ON ad_filters (owner_tg_id);
+
+-- Near-duplicate suppression. The owner can toggle it, and tune the lookback
+-- window (minutes), similarity threshold (percent) and the minimum caption
+-- length below which dedup is skipped. All comparison is lexical and done in
+-- memory — these columns only persist the per-user knobs.
+ALTER TABLE user_settings ADD COLUMN IF NOT EXISTS dedup_enabled BOOLEAN NOT NULL DEFAULT FALSE;
+ALTER TABLE user_settings ADD COLUMN IF NOT EXISTS dedup_window_min INT NOT NULL DEFAULT 30;
+ALTER TABLE user_settings ADD COLUMN IF NOT EXISTS dedup_threshold INT NOT NULL DEFAULT 90;
+ALTER TABLE user_settings ADD COLUMN IF NOT EXISTS dedup_min_len INT NOT NULL DEFAULT 20;
 """
 
 
@@ -168,6 +181,32 @@ async def toggle_dest_show_username(pool, tg_id):
 async def toggle_ad_filter_enabled(pool, tg_id):
     # Default OFF, so the first tap turns it ON (insert TRUE for a new row).
     return await _toggle_bool(pool, tg_id, "ad_filter_enabled", True)
+
+
+async def toggle_dedup_enabled(pool, tg_id):
+    return await _toggle_bool(pool, tg_id, "dedup_enabled", True)
+
+
+async def _set_int(pool, tg_id, column, value):
+    """Generic integer setter for user_settings columns."""
+    async with pool.acquire() as con:
+        await con.execute(
+            f"INSERT INTO user_settings (tg_user_id, {column}) VALUES ($1, $2) "
+            f"ON CONFLICT (tg_user_id) DO UPDATE SET {column} = $2",
+            tg_id, value,
+        )
+
+
+async def set_dedup_window(pool, tg_id, minutes):
+    await _set_int(pool, tg_id, "dedup_window_min", int(minutes))
+
+
+async def set_dedup_threshold(pool, tg_id, percent):
+    await _set_int(pool, tg_id, "dedup_threshold", int(percent))
+
+
+async def set_dedup_min_len(pool, tg_id, chars):
+    await _set_int(pool, tg_id, "dedup_min_len", int(chars))
 
 
 async def add_ad_filter(pool, owner, pattern):
@@ -413,6 +452,10 @@ async def destinations_for_tg_source(pool, tg_chat_id):
             "       COALESCE(us.dest_show_username, TRUE) AS dest_show_username, "
             "       d.owner_tg_id AS owner_tg_id, "
             "       COALESCE(us.ad_filter_enabled, FALSE) AS ad_filter_enabled, "
+            "       COALESCE(us.dedup_enabled, FALSE) AS dedup_enabled, "
+            "       COALESCE(us.dedup_window_min, 30) AS dedup_window_min, "
+            "       COALESCE(us.dedup_threshold, 90) AS dedup_threshold, "
+            "       COALESCE(us.dedup_min_len, 20) AS dedup_min_len, "
             "       COALESCE(us.language, 'en') AS owner_lang "
             "FROM sources s JOIN destinations d ON d.id = s.destination_id "
             "LEFT JOIN user_settings us ON us.tg_user_id = d.owner_tg_id "
@@ -439,6 +482,10 @@ async def all_tg_sources(pool):
             "       COALESCE(us.dest_show_username, TRUE) AS dest_show_username, "
             "       d.owner_tg_id AS owner_tg_id, "
             "       COALESCE(us.ad_filter_enabled, FALSE) AS ad_filter_enabled, "
+            "       COALESCE(us.dedup_enabled, FALSE) AS dedup_enabled, "
+            "       COALESCE(us.dedup_window_min, 30) AS dedup_window_min, "
+            "       COALESCE(us.dedup_threshold, 90) AS dedup_threshold, "
+            "       COALESCE(us.dedup_min_len, 20) AS dedup_min_len, "
             "       COALESCE(us.language, 'en') AS owner_lang "
             "FROM sources s JOIN destinations d ON d.id = s.destination_id "
             "LEFT JOIN user_settings us ON us.tg_user_id = d.owner_tg_id "
@@ -471,6 +518,10 @@ async def all_rss_sources(pool):
             "       COALESCE(us.dest_show_username, TRUE) AS dest_show_username, "
             "       d.owner_tg_id AS owner_tg_id, "
             "       COALESCE(us.ad_filter_enabled, FALSE) AS ad_filter_enabled, "
+            "       COALESCE(us.dedup_enabled, FALSE) AS dedup_enabled, "
+            "       COALESCE(us.dedup_window_min, 30) AS dedup_window_min, "
+            "       COALESCE(us.dedup_threshold, 90) AS dedup_threshold, "
+            "       COALESCE(us.dedup_min_len, 20) AS dedup_min_len, "
             "       COALESCE(us.language, 'en') AS owner_lang "
             "FROM sources s JOIN destinations d ON d.id = s.destination_id "
             "LEFT JOIN user_settings us ON us.tg_user_id = d.owner_tg_id "

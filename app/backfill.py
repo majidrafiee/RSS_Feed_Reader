@@ -4,6 +4,7 @@ import logging
 from telethon import utils
 
 from app import db
+from app import dedup
 from app.formatting import matches_ad_filter
 from app.publisher import publish_tg, publish_tg_album
 
@@ -147,6 +148,24 @@ async def _backfill_one(pool, client, chat_id, dest_rows):
                         pool, r["source_id"], max_id
                     )
                     continue
+            # Near-duplicate suppression on recovered posts. is_duplicate() is
+            # synchronous, so a live post and this backfill item can never both
+            # pass the gate for the same story.
+            if r["dedup_enabled"] and dedup.is_duplicate(
+                r["dest_chat_id"],
+                " ".join(m.message or "" for m in item),
+                r["dedup_window_min"],
+                r["dedup_threshold"],
+                r["dedup_min_len"],
+            ):
+                log.info(
+                    "dedup: skip backfill src=%s ids=%s-%s -> dest=%s",
+                    chat_id, rep_id, max_id, r["dest_chat_id"],
+                )
+                await db.update_source_last_msg(
+                    pool, r["source_id"], max_id
+                )
+                continue
             meta = {
                 "source_label": r["source_label"] or live_title,
                 "source_username": r["source_username"] or live_username,

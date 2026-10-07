@@ -142,6 +142,37 @@ T = {
         "ad_clean_running": "\u23F3 Scanning your channels and deleting matching ads\u2026",
         "ad_clean_done": "\u2705 Deleted <b>{n}</b> ad post(s) from your channel(s).",
         "ad_clean_nomatch": "\u2705 Scan complete \u2014 no matching posts found.",
+        "btn_dedup": "\U0001F500 Duplicate filter",
+        "btn_dedup_on": "\U0001F7E2 Duplicate filter: ON",
+        "btn_dedup_off": "\u26AA Duplicate filter: OFF",
+        "btn_dedup_window": "\u23F1 Lookback window: {min} min",
+        "btn_dedup_threshold": "\U0001F3AF Similarity threshold: {pct}%",
+        "btn_dedup_minlen": "\u270F\uFE0F Minimum length: {n} chars",
+        "btn_dedup_window_opt": "{min} min",
+        "btn_dedup_threshold_opt": "{pct}%",
+        "btn_dedup_minlen_opt": "{n} chars",
+        "dedup_title": (
+            "\U0001F500 <b>Duplicate filter</b>\n\n"
+            "Status: <b>{status}</b>\n\n"
+            "When ON, a post whose text is nearly identical to something already "
+            "published to the same channel is skipped \u2014 the first copy wins. "
+            "Comparison ignores emoji, links and Arabic/Persian spelling.\n\n"
+            "\u2022 Lookback window: <b>{min} min</b>\n"
+            "\u2022 Similarity threshold: <b>{pct}%</b>\n"
+            "\u2022 Minimum length: <b>{n} chars</b>"
+        ),
+        "dedup_choose_window": (
+            "How far back should I look for duplicates?\n\n"
+            "<i>Only posts from the last N minutes are compared.</i>"
+        ),
+        "dedup_choose_threshold": (
+            "How similar must two posts be to count as duplicates?\n\n"
+            "<i>Higher = stricter (only near-identical posts dropped).</i>"
+        ),
+        "dedup_choose_minlen": (
+            "Shortest caption to check.\n\n"
+            "<i>Posts shorter than this are never treated as duplicates.</i>"
+        ),
         "on": "ON",
         "off": "OFF",
     },
@@ -269,6 +300,19 @@ T = {
         "ad_clean_running": "\u23f3 \u062f\u0631 \u062d\u0627\u0644 \u0628\u0631\u0631\u0633\u06cc \u06a9\u0627\u0646\u0627\u0644\u200c\u0647\u0627 \u0648 \u062d\u0630\u0641 \u062a\u0628\u0644\u06cc\u063a\u0627\u062a \u0645\u0646\u0637\u0628\u0642\u2026",
         "ad_clean_done": "\u2705 \u062a\u0639\u062f\u0627\u062f <b>{n}</b> \u067e\u0633\u062a \u062a\u0628\u0644\u06cc\u063a\u0627\u062a\u06cc \u0627\u0632 \u06a9\u0627\u0646\u0627\u0644\u200c(\u0647\u0627\u06cc) \u0634\u0645\u0627 \u062d\u0630\u0641 \u0634\u062f.",
         "ad_clean_nomatch": "\u2705 \u0628\u0631\u0631\u0633\u06cc \u06a9\u0627\u0645\u0644 \u0634\u062f \u2014 \u067e\u0633\u062a \u0645\u0646\u0637\u0628\u0642\u06cc \u06cc\u0627\u0641\u062a \u0646\u0634\u062f.",
+        "btn_dedup": "\U0001f500 \u0641\u06cc\u0644\u062a\u0631 \u062a\u06a9\u0631\u0627\u0631\u06cc\u200c\u0647\u0627",
+        "btn_dedup_on": "\U0001f7e2 \u0641\u06cc\u0644\u062a\u0631 \u062a\u06a9\u0631\u0627\u0631\u06cc\u200c\u0647\u0627: \u0631\u0648\u0634\u0646",
+        "btn_dedup_off": "\u26aa \u0641\u06cc\u0644\u062a\u0631 \u062a\u06a9\u0631\u0627\u0631\u06cc\u200c\u0647\u0627: \u062e\u0627\u0645\u0648\u0634",
+        "btn_dedup_window": "\u23f1 \u0628\u0627\u0632\u0647 \u0628\u0631\u0631\u0633\u06cc: {min} \u062f\u0642\u06cc\u0642\u0647",
+        "btn_dedup_threshold": "\U0001f3af \u0622\u0633\u062a\u0627\u0646\u0647 \u0634\u0628\u0627\u0647\u062a: {pct}\u066a",
+        "btn_dedup_minlen": "\u270f\ufe0f \u062d\u062f\u0627\u0642\u0644 \u0637\u0648\u0644: {n} \u06a9\u0627\u0631\u0627\u06a9\u062a\u0631",
+        "btn_dedup_window_opt": "{min} \u062f\u0642\u06cc\u0642\u0647",
+        "btn_dedup_threshold_opt": "{pct}\u066a",
+        "btn_dedup_minlen_opt": "{n} \u06a9\u0627\u0631\u0627\u06a9\u062a\u0631",
+        "dedup_title": "\U0001f500 <b>\u0641\u06cc\u0644\u062a\u0631 \u062a\u06a9\u0631\u0627\u0631\u06cc\u200c\u0647\u0627</b>\n\n\u0648\u0636\u0639\u06cc\u062a: <b>{status}</b>\n\n\u0648\u0642\u062a\u06cc \u0631\u0648\u0634\u0646 \u0628\u0627\u0634\u062f\u060c \u067e\u0633\u062a\u06cc \u06a9\u0647 \u0645\u062a\u0646 \u0622\u0646 \u062a\u0642\u0631\u06cc\u0628\u0627\u064b \u0645\u0634\u0627\u0628\u0647 \u0686\u06cc\u0632\u06cc \u0628\u0627\u0634\u062f \u06a9\u0647 \u067e\u06cc\u0634\u200c\u062a\u0631 \u062f\u0631 \u0647\u0645\u0627\u0646 \u06a9\u0627\u0646\u0627\u0644 \u0645\u0646\u062a\u0634\u0631 \u0634\u062f\u0647 \u0646\u0627\u062f\u06cc\u062f\u0647 \u06af\u0631\u0641\u062a\u0647 \u0645\u06cc\u200c\u0634\u0648\u062f \u2014 \u0646\u0633\u062e\u0647 \u0627\u0648\u0644 \u0628\u0631\u0646\u062f\u0647 \u0627\u0633\u062a. \u062f\u0631 \u0645\u0642\u0627\u06cc\u0633\u0647\u060c \u0627\u06cc\u0645\u0648\u062c\u06cc\u060c \u0644\u06cc\u0646\u06a9\u200c\u0647\u0627 \u0648 \u062a\u0641\u0627\u0648\u062a \u0627\u0645\u0644\u0627\u06cc \u0639\u0631\u0628\u06cc/\u0641\u0627\u0631\u0633\u06cc \u0646\u0627\u062f\u06cc\u062f\u0647 \u06af\u0631\u0641\u062a\u0647 \u0645\u06cc\u200c\u0634\u0648\u0646\u062f.\n\n\u2022 \u0628\u0627\u0632\u0647 \u0628\u0631\u0631\u0633\u06cc: <b>{min} \u062f\u0642\u06cc\u0642\u0647</b>\n\u2022 \u0622\u0633\u062a\u0627\u0646\u0647 \u0634\u0628\u0627\u0647\u062a: <b>{pct}\u066a</b>\n\u2022 \u062d\u062f\u0627\u0642\u0644 \u0637\u0648\u0644: <b>{n} \u06a9\u0627\u0631\u0627\u06a9\u062a\u0631</b>",
+        "dedup_choose_window": "\u062a\u0627 \u0686\u0646\u062f \u062f\u0642\u06cc\u0642\u0647 \u0642\u0628\u0644 \u0628\u0631\u0627\u06cc \u06cc\u0627\u0641\u062a\u0646 \u062a\u06a9\u0631\u0627\u0631\u06cc\u200c\u0647\u0627 \u0628\u0631\u0631\u0633\u06cc \u0634\u0648\u062f\u061f\n\n<i>\u0641\u0642\u0637 \u067e\u0633\u062a\u200c\u0647\u0627\u06cc N \u062f\u0642\u06cc\u0642\u0647 \u0627\u062e\u06cc\u0631 \u0645\u0642\u0627\u06cc\u0633\u0647 \u0645\u06cc\u200c\u0634\u0648\u0646\u062f.</i>",
+        "dedup_choose_threshold": "\u062f\u0648 \u067e\u0633\u062a \u0686\u0642\u062f\u0631 \u0628\u0627\u06cc\u062f \u0634\u0628\u06cc\u0647 \u0628\u0627\u0634\u0646\u062f \u062a\u0627 \u062a\u06a9\u0631\u0627\u0631\u06cc \u0645\u062d\u0633\u0648\u0628 \u0634\u0648\u0646\u062f\u061f\n\n<i>\u0628\u0627\u0644\u0627\u062a\u0631 = \u0633\u062e\u062a\u200c\u06af\u06cc\u0631\u0627\u0646\u0647\u200c\u062a\u0631 (\u0641\u0642\u0637 \u067e\u0633\u062a\u200c\u0647\u0627\u06cc \u062a\u0642\u0631\u06cc\u0628\u0627\u064b \u06cc\u06a9\u0633\u0627\u0646 \u062d\u0630\u0641 \u0645\u06cc\u200c\u0634\u0648\u0646\u062f).</i>",
+        "dedup_choose_minlen": "\u06a9\u0648\u062a\u0627\u0647\u200c\u062a\u0631\u06cc\u0646 \u0645\u062a\u0646\u06cc \u06a9\u0647 \u0628\u0631\u0631\u0633\u06cc \u0634\u0648\u062f.\n\n<i>\u067e\u0633\u062a\u200c\u0647\u0627\u06cc \u06a9\u0648\u062a\u0627\u0647\u200c\u062a\u0631 \u0627\u0632 \u0627\u06cc\u0646 \u0647\u0631\u06af\u0632 \u062a\u06a9\u0631\u0627\u0631\u06cc \u062f\u0631 \u0646\u0638\u0631 \u06af\u0631\u0641\u062a\u0647 \u0646\u0645\u06cc\u200c\u0634\u0648\u0646\u062f.</i>",
         "on": "\u0631\u0648\u0634\u0646",
         "off": "\u062E\u0627\u0645\u0648\u0634",
     },

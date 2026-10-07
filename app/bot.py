@@ -17,6 +17,10 @@ from app.i18n import t
 from app.keyboards import (
     ad_clean_confirm_kb,
     ad_filter_kb,
+    dedup_kb,
+    dedup_minlen_kb,
+    dedup_threshold_kb,
+    dedup_window_kb,
     destinations_kb,
     dests_manage_kb,
     interval_kb,
@@ -568,6 +572,97 @@ async def cb_lang_chosen(cb: CallbackQuery, pool):
     row = await db.get_settings(pool, cb.from_user.id)
     await _safe_edit(cb, t(new_lang, "settings_title"), reply_markup=settings_kb(row, new_lang))
     await cb.answer(t(new_lang, "saved"))
+
+
+# ---------------------------------------------------------------------------
+# Duplicate filter: lexical near-duplicate suppression. On/off toggle plus
+# three tunable knobs (lookback window, similarity threshold, minimum caption
+# length). All comparison happens in memory in the publisher paths.
+# ---------------------------------------------------------------------------
+
+
+@router.callback_query(F.data == "dedup")
+async def cb_dedup(cb: CallbackQuery, state: FSMContext, pool):
+    await state.clear()
+    row = await db.get_settings(pool, cb.from_user.id)
+    lang = row["language"]
+    status = t(lang, "on") if row["dedup_enabled"] else t(lang, "off")
+    text = t(
+        lang, "dedup_title",
+        status=status,
+        min=row["dedup_window_min"],
+        pct=row["dedup_threshold"],
+        n=row["dedup_min_len"],
+    )
+    await _safe_edit(cb, text, reply_markup=dedup_kb(row, lang))
+    await cb.answer()
+
+
+async def _dedup_back(cb: CallbackQuery, pool, note=None):
+    row = await db.get_settings(pool, cb.from_user.id)
+    lang = row["language"]
+    status = t(lang, "on") if row["dedup_enabled"] else t(lang, "off")
+    text = t(
+        lang, "dedup_title",
+        status=status,
+        min=row["dedup_window_min"],
+        pct=row["dedup_threshold"],
+        n=row["dedup_min_len"],
+    )
+    await _safe_edit(cb, text, reply_markup=dedup_kb(row, lang))
+    await cb.answer(note or "")
+
+
+@router.callback_query(F.data == "dedup_toggle")
+async def cb_dedup_toggle(cb: CallbackQuery, pool):
+    await db.toggle_dedup_enabled(pool, cb.from_user.id)
+    lang = await _lang(pool, cb.from_user.id)
+    await _dedup_back(cb, pool, t(lang, "saved"))
+
+
+@router.callback_query(F.data == "dedup_set_window")
+async def cb_dedup_set_window(cb: CallbackQuery, pool):
+    lang = await _lang(pool, cb.from_user.id)
+    await _safe_edit(cb, t(lang, "dedup_choose_window"), reply_markup=dedup_window_kb(lang))
+    await cb.answer()
+
+
+@router.callback_query(F.data.startswith("dedup_window:"))
+async def cb_dedup_window_chosen(cb: CallbackQuery, pool):
+    minutes = int(cb.data.split(":", 1)[1])
+    await db.set_dedup_window(pool, cb.from_user.id, minutes)
+    lang = await _lang(pool, cb.from_user.id)
+    await _dedup_back(cb, pool, t(lang, "saved"))
+
+
+@router.callback_query(F.data == "dedup_set_threshold")
+async def cb_dedup_set_threshold(cb: CallbackQuery, pool):
+    lang = await _lang(pool, cb.from_user.id)
+    await _safe_edit(cb, t(lang, "dedup_choose_threshold"), reply_markup=dedup_threshold_kb(lang))
+    await cb.answer()
+
+
+@router.callback_query(F.data.startswith("dedup_threshold:"))
+async def cb_dedup_threshold_chosen(cb: CallbackQuery, pool):
+    pct = int(cb.data.split(":", 1)[1])
+    await db.set_dedup_threshold(pool, cb.from_user.id, pct)
+    lang = await _lang(pool, cb.from_user.id)
+    await _dedup_back(cb, pool, t(lang, "saved"))
+
+
+@router.callback_query(F.data == "dedup_set_minlen")
+async def cb_dedup_set_minlen(cb: CallbackQuery, pool):
+    lang = await _lang(pool, cb.from_user.id)
+    await _safe_edit(cb, t(lang, "dedup_choose_minlen"), reply_markup=dedup_minlen_kb(lang))
+    await cb.answer()
+
+
+@router.callback_query(F.data.startswith("dedup_minlen:"))
+async def cb_dedup_minlen_chosen(cb: CallbackQuery, pool):
+    n = int(cb.data.split(":", 1)[1])
+    await db.set_dedup_min_len(pool, cb.from_user.id, n)
+    lang = await _lang(pool, cb.from_user.id)
+    await _dedup_back(cb, pool, t(lang, "saved"))
 
 
 # ---------------------------------------------------------------------------
