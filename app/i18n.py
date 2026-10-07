@@ -175,6 +175,31 @@ T = {
         ),
         "on": "ON",
         "off": "OFF",
+        "btn_status": "\U0001F4CA Status",
+        "userbot_dead_hint": (
+            "\U0001F534 <b>Userbot session is dead!</b>\n\n"
+            "The reader account\u2019s session string was used from two different "
+            "IPs (e.g. two containers running at the same time), so Telegram "
+            "killed it permanently. No posts will be delivered until you fix "
+            "this.\n\n"
+            "<b>How to fix:</b>\n"
+            "1\uFE0F\u20E3 Generate a new session string (run gen_session.py or "
+            "use Telethon locally).\n"
+            "2\uFE0F\u20E3 Update the SESSION_STRING env var on your hosting "
+            "platform.\n"
+            "3\uFE0F\u20E3 Redeploy.\n\n"
+            "Make sure only ONE container runs with the same session string, "
+            "or it will die again."
+        ),
+        "status_text": (
+            "\U0001F4CA <b>Bot Status</b>\n\n"
+            "\u2022 Userbot session: {alive_icon} <b>{alive_word}</b>\n"
+            "{err_line}"
+            "\u2022 Duplicate filter checks: <b>{dedup_checked}</b>\n"
+            "\u2022 Duplicates blocked: <b>{dedup_dropped}</b>\n"
+            "\u2022 Destinations tracked: <b>{dedup_tracked}</b>"
+        ),
+        "status_err_line": "\u26A0\uFE0F <i>{err_detail}</i>\n",
     },
     "fa": {
         "welcome": (
@@ -315,6 +340,27 @@ T = {
         "dedup_choose_minlen": "\u06a9\u0648\u062a\u0627\u0647\u200c\u062a\u0631\u06cc\u0646 \u0645\u062a\u0646\u06cc \u06a9\u0647 \u0628\u0631\u0631\u0633\u06cc \u0634\u0648\u062f.\n\n<i>\u067e\u0633\u062a\u200c\u0647\u0627\u06cc \u06a9\u0648\u062a\u0627\u0647\u200c\u062a\u0631 \u0627\u0632 \u0627\u06cc\u0646 \u0647\u0631\u06af\u0632 \u062a\u06a9\u0631\u0627\u0631\u06cc \u062f\u0631 \u0646\u0638\u0631 \u06af\u0631\u0641\u062a\u0647 \u0646\u0645\u06cc\u200c\u0634\u0648\u0646\u062f.</i>",
         "on": "\u0631\u0648\u0634\u0646",
         "off": "\u062E\u0627\u0645\u0648\u0634",
+        "btn_status": "\U0001F4CA \u0648\u0636\u0639\u06cc\u062a",
+        "userbot_dead_hint": (
+            "\U0001F534 <b>\u062c\u0644\u0633\u0647 \u06cc\u0648\u0632\u0631\u0628\u0627\u062a \u0645\u0631\u062f\u0647!</b>\n\n"
+            "\u0631\u0634\u062a\u0647 \u062c\u0644\u0633\u0647 \u062d\u0633\u0627\u0628 \u062e\u0648\u0627\u0646\u0646\u062f\u0647 \u0627\u0632 \u062f\u0648 IP \u0645\u062e\u062a\u0644\u0641 "
+            "\u0627\u0633\u062a\u0641\u0627\u062f\u0647 \u0634\u062f\u0647 \u0648 \u062a\u0644\u06af\u0631\u0627\u0645 \u0622\u0646 \u0631\u0627 \u0628\u0631\u0627\u06cc \u0647\u0645\u06cc\u0634\u0647 \u0627\u0628\u0637\u0627\u0644 \u06a9\u0631\u062f\u0647. "
+            "\u0647\u06cc\u0686 \u067e\u0633\u062a\u06cc \u062a\u0627 \u0632\u0645\u0627\u0646 \u062a\u0635\u0631\u06cc\u062d \u0627\u06cc\u0646 \u0645\u0634\u06a9\u0644 \u0627\u0631\u0633\u0627\u0644 \u0646\u0645\u06cc\u200c\u0634\u0648\u062f.\n\n"
+            "<b>\u0631\u0627\u0647 \u062d\u0644:</b>\n"
+            "1\uFE0F\u20E3 \u06cc\u06a9 \u0631\u0634\u062a\u0647 \u062c\u0644\u0633\u0647 \u062c\u062f\u06cc\u062f \u0628\u0633\u0627\u0632\u06cc\u062f (gen_session.py).\n"
+            "2\uFE0F\u20E3 SESSION_STRING \u0631\u0627 \u062f\u0631 \u0645\u06cc\u0632\u0628\u0627\u0646 \u0645\u06cc\u0632\u0628\u0627\u0646\u06cc \u062e\u0648\u062f \u0628\u0647\u200c\u0631\u0648\u0632\u0631\u0633\u0627\u0646\u06cc \u06a9\u0646\u06cc\u062f.\n"
+            "3\uFE0F\u20E3 \u062f\u0648\u0628\u0627\u0631\u0647 \u0627\u0632 \u0646\u0634\u0633\u062a \u06a9\u0646\u06cc\u062f.\n\n"
+            "\u0645\u0637\u0645\u0626\u0646 \u0634\u0648\u06cc\u062f \u0641\u0642\u0637 \u06cc\u06a9 \u06a9\u0646\u062a\u06cc\u0646\u0631 \u0628\u0627 \u06cc\u0646 \u062c\u0644\u0633\u0647 \u0627\u062c\u0631\u0627 \u0645\u06cc\u200c\u0634\u0648\u062f\u060c \u0648\u0631\u0646\u0627 \u062f\u0648\u0628\u0627\u0631\u0647 \u0645\u06cc\u0645\u06cc\u0631\u062f."
+        ),
+        "status_text": (
+            "\U0001F4CA <b>\u0648\u0636\u0639\u06cc\u062a \u0631\u0628\u0627\u062a</b>\n\n"
+            "\u2022 \u062c\u0644\u0633\u0647 \u06cc\u0648\u0632\u0631\u0628\u0627\u062a: {alive_icon} <b>{alive_word}</b>\n"
+            "{err_line}"
+            "\u2022 \u0628\u0631\u0631\u0633\u06cc \u062a\u06a9\u0631\u0627\u0631\u06cc: <b>{dedup_checked}</b>\n"
+            "\u2022 \u062a\u06a9\u0631\u0627\u0631\u06cc \u0645\u0633\u062f\u0648\u062f: <b>{dedup_dropped}</b>\n"
+            "\u2022 \u0645\u0642\u0635\u062f\u0647\u0627\u06cc \u067e\u06cc\u06af\u06cc\u0631\u06cc: <b>{dedup_tracked}</b>"
+        ),
+        "status_err_line": "\u26A0\uFE0F <i>{err_detail}</i>\n",
     },
 }
 

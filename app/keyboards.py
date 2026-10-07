@@ -5,15 +5,18 @@ from app.i18n import t
 INTERVALS = [5, 10, 15, 20, 30]
 
 
-def main_menu(lang: str = "en") -> InlineKeyboardMarkup:
-    return InlineKeyboardMarkup(
-        inline_keyboard=[
-            [InlineKeyboardButton(text=t(lang, "btn_add_dest"), callback_data="add_dest")],
-            [InlineKeyboardButton(text=t(lang, "btn_add_source"), callback_data="add_source")],
-            [InlineKeyboardButton(text=t(lang, "btn_my_setup"), callback_data="my_setup")],
-            [InlineKeyboardButton(text=t(lang, "btn_settings"), callback_data="settings")],
-        ]
+def main_menu(lang: str = "en", alive: bool = True) -> InlineKeyboardMarkup:
+    rows = [
+        [InlineKeyboardButton(text=t(lang, "btn_add_dest"), callback_data="add_dest")],
+        [InlineKeyboardButton(text=t(lang, "btn_add_source"), callback_data="add_source")],
+        [InlineKeyboardButton(text=t(lang, "btn_my_setup"), callback_data="my_setup")],
+        [InlineKeyboardButton(text=t(lang, "btn_settings"), callback_data="settings")],
+    ]
+    # Always show Status button; when userbot is dead, also show a red alert.
+    rows.append(
+        [InlineKeyboardButton(text=t(lang, "btn_status"), callback_data="status")]
     )
+    return InlineKeyboardMarkup(inline_keyboard=rows)
 
 
 def nav_kb(lang: str = "en", back_to: str = "home") -> InlineKeyboardMarkup:

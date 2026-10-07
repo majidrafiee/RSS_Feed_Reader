@@ -4,7 +4,7 @@ from urllib.parse import urlparse
 from aiogram import F, Router
 from aiogram.enums import ChatType
 from aiogram.exceptions import TelegramBadRequest, TelegramNetworkError
-from aiogram.filters import CommandStart
+from aiogram.filters import CommandStart, Command
 from aiogram.fsm.context import FSMContext
 from aiogram.fsm.state import State, StatesGroup
 from aiogram.types import CallbackQuery, ErrorEvent, Message
@@ -33,8 +33,15 @@ from app.keyboards import (
     sources_manage_kb,
     test_dest_kb,
 )
+
+# Helper to read the shared userbot health state. In aiogram 3, any key set
+# via dp["key"] = value is injected into handlers by parameter name, so we read
+# `userbot_alive` / `userbot_error` directly as handler kwargs (with safe
+# defaults so handlers still work if the keys were never set).
+
 from app.publisher import refresh_destinations, resolve_dest, send_test_post
 from app.rss import seed_source, validate_feed
+from app import dedup
 
 log = logging.getLogger("bot")
 router = Router()
@@ -116,28 +123,35 @@ def _rss_label(url: str) -> str:
 
 
 @router.message(CommandStart())
-async def cmd_start(message: Message, state: FSMContext, pool, reader: str):
+async def cmd_start(message: Message, state: FSMContext, pool, reader: str,
+                    userbot_alive: bool = True, userbot_error: str = ""):
     await state.clear()
     row = await db.get_settings(pool, message.from_user.id, _detect_lang(message))
     lang = row["language"]
     await message.answer(
-        t(lang, "welcome", reader=reader), reply_markup=main_menu(lang)
+        t(lang, "welcome", reader=reader), reply_markup=main_menu(lang, alive=userbot_alive)
     )
+    # If the userbot is dead, send an extra warning so the owner sees it
+    # immediately instead of having to dig into /status.
+    if not userbot_alive:
+        await message.answer(t(lang, "userbot_dead_hint"))
 
 
 @router.callback_query(F.data == "home")
-async def cb_home(cb: CallbackQuery, state: FSMContext, pool, reader: str):
+async def cb_home(cb: CallbackQuery, state: FSMContext, pool, reader: str,
+                  userbot_alive: bool = True, userbot_error: str = ""):
     await state.clear()
     lang = await _lang(pool, cb.from_user.id)
-    await _safe_edit(cb, t(lang, "welcome", reader=reader), reply_markup=main_menu(lang))
+    await _safe_edit(cb, t(lang, "welcome", reader=reader), reply_markup=main_menu(lang, alive=userbot_alive))
     await cb.answer()
 
 
 @router.callback_query(F.data == "cancel")
-async def cb_cancel(cb: CallbackQuery, state: FSMContext, pool, reader: str):
+async def cb_cancel(cb: CallbackQuery, state: FSMContext, pool, reader: str,
+                    userbot_alive: bool = True, userbot_error: str = ""):
     await state.clear()
     lang = await _lang(pool, cb.from_user.id)
-    await _safe_edit(cb, t(lang, "welcome", reader=reader), reply_markup=main_menu(lang))
+    await _safe_edit(cb, t(lang, "welcome", reader=reader), reply_markup=main_menu(lang, alive=userbot_alive))
     await cb.answer(t(lang, "cancelled"))
 
 
@@ -814,3 +828,50 @@ async def cb_ad_clean_yes(cb: CallbackQuery, pool, client):
     await cb.message.answer(done)
     text, kb = await _ad_filter_view(pool, owner, lang)
     await cb.message.answer(text, reply_markup=kb)
+
+
+# ---------------------------------------------------------------------------
+# /status command: show userbot health + dedup stats + recent trace counts.
+# ---------------------------------------------------------------------------
+
+
+@router.message(Command("status"))
+async def cmd_status(message: Message, pool,
+                     userbot_alive: bool = True, userbot_error: str = ""):
+    """Show the current health of the userbot session + dedup stats."""
+    lang = await _lang(pool, message.from_user.id)
+    alive, err = userbot_alive, (userbot_error or "")
+    # Dedup stats from the in-memory filter.
+    stats = dedup.stats()
+    err_line = t(lang, "status_err_line", err_detail=err) if err else ""
+    text = t(
+        lang, "status_text",
+        alive_icon="\U0001F7E2" if alive else "\U0001F534",
+        alive_word=t(lang, "on") if alive else t(lang, "off"),
+        err_line=err_line,
+        dedup_checked=stats["checked"],
+        dedup_dropped=stats["dropped"],
+        dedup_tracked=stats["tracked"],
+    )
+    await message.answer(text, reply_markup=main_menu(lang, alive=alive))
+
+
+@router.callback_query(F.data == "status")
+async def cb_status(cb: CallbackQuery, pool,
+                    userbot_alive: bool = True, userbot_error: str = ""):
+    """Status button in the main menu."""
+    lang = await _lang(pool, cb.from_user.id)
+    alive, err = userbot_alive, (userbot_error or "")
+    stats = dedup.stats()
+    err_line = t(lang, "status_err_line", err_detail=err) if err else ""
+    text = t(
+        lang, "status_text",
+        alive_icon="\U0001F7E2" if alive else "\U0001F534",
+        alive_word=t(lang, "on") if alive else t(lang, "off"),
+        err_line=err_line,
+        dedup_checked=stats["checked"],
+        dedup_dropped=stats["dropped"],
+        dedup_tracked=stats["tracked"],
+    )
+    await _safe_edit(cb, text, reply_markup=main_menu(lang, alive=alive))
+    await cb.answer()

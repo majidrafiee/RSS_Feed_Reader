@@ -92,6 +92,9 @@ def is_duplicate(dest_chat_id, text, window_min, threshold_pct, min_len):
 
     Synchronous on purpose (atomic within the event loop).
     """
+    global _checked, _dropped
+    _checked += 1
+
     norm = normalize(text)
     # Too short to judge reliably — never treat as a duplicate, never record.
     if len(norm) < max(1, int(min_len)):
@@ -107,6 +110,7 @@ def is_duplicate(dest_chat_id, text, window_min, threshold_pct, min_len):
 
     h = hash(norm)
     if h in hashes:
+        _dropped += 1
         return True  # exact normalised match, cheap path
 
     matcher = SequenceMatcher(a=norm)
@@ -117,6 +121,7 @@ def is_duplicate(dest_chat_id, text, window_min, threshold_pct, min_len):
         if matcher.quick_ratio() < thr:
             continue
         if matcher.ratio() >= thr:
+            _dropped += 1
             return True
 
     # First time we've seen this — record and let it through.
@@ -133,3 +138,16 @@ def reset(dest_chat_id=None):
     else:
         _WINDOWS.pop(dest_chat_id, None)
         _HASHES.pop(dest_chat_id, None)
+
+
+# Running counters for /status display.
+_checked = 0
+_dropped = 0
+
+
+def stats():
+    """Return a snapshot of dedup stats for /status display."""
+    global _checked, _dropped
+    # Recount tracked destinations from the live data structures.
+    tracked = len(_WINDOWS)
+    return {"checked": _checked, "dropped": _dropped, "tracked": tracked}
