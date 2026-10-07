@@ -5,6 +5,7 @@ from telethon import utils
 
 from app import db
 from app import dedup
+from app import trace
 from app.formatting import matches_ad_filter
 from app.publisher import publish_tg, publish_tg_album
 
@@ -45,6 +46,9 @@ async def backfill_tg_sources(pool, client):
             await _backfill_one(pool, client, chat_id, dest_rows)
         except Exception as exc:  # noqa: BLE001
             log.warning("backfill: source %s failed: %s", chat_id, exc)
+            # Detect the session conflict error specifically.
+            if "used under two different IP" in str(exc):
+                trace.session_bad(chat_id, exc)
 
 
 async def _backfill_one(pool, client, chat_id, dest_rows):
@@ -132,6 +136,7 @@ async def _backfill_one(pool, client, chat_id, dest_rows):
             if not await db.claim_tg_message(pool, r["source_id"], rep_id):
                 continue
             if is_forwarded and r["skip_forwarded"]:
+                trace.post_drop(chat_id, r["dest_chat_id"], rep_id, "forwarded")
                 await db.update_source_last_msg(pool, r["source_id"], max_id)
                 continue
             # Runtime ad filter: skip a recovered post/album whose text matches
@@ -144,6 +149,7 @@ async def _backfill_one(pool, client, chat_id, dest_rows):
                         "ad-filter: skip backfill src=%s ids=%s-%s -> dest=%s",
                         chat_id, rep_id, max_id, r["dest_chat_id"],
                     )
+                    trace.post_drop(chat_id, r["dest_chat_id"], rep_id, "ad-filter", item_text)
                     await db.update_source_last_msg(
                         pool, r["source_id"], max_id
                     )
@@ -162,6 +168,7 @@ async def _backfill_one(pool, client, chat_id, dest_rows):
                     "dedup: skip backfill src=%s ids=%s-%s -> dest=%s",
                     chat_id, rep_id, max_id, r["dest_chat_id"],
                 )
+                trace.post_drop(chat_id, r["dest_chat_id"], rep_id, "dedup", " ".join(m.message or "" for m in item))
                 await db.update_source_last_msg(
                     pool, r["source_id"], max_id
                 )
@@ -194,4 +201,5 @@ async def _backfill_one(pool, client, chat_id, dest_rows):
                     "backfill: publish src=%s ids=%s-%s -> dest=%s failed: %s",
                     chat_id, rep_id, max_id, r["dest_chat_id"], exc,
                 )
+                trace.post_fail(chat_id, r["dest_chat_id"], rep_id, exc)
         await asyncio.sleep(0.6)

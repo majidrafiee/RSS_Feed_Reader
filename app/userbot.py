@@ -4,6 +4,7 @@ from telethon import events, utils
 
 from app import db
 from app import dedup
+from app import trace
 from app.formatting import matches_ad_filter
 from app.publisher import publish_tg, publish_tg_album
 
@@ -103,7 +104,7 @@ def register_userbot(client, pool):
                         "skipping forwarded post from %s -> dest %s",
                         chat_id, row["dest_chat_id"],
                     )
-                    # Advance watermark so the skip doesn't look like a gap.
+                    trace.post_drop(chat_id, row["dest_chat_id"], msg_id, "forwarded", event.message.message or "")
                     await db.update_source_last_msg(pool, row["source_id"], msg_id)
                     continue
                 # Runtime ad filter: skip a new post whose text matches one of
@@ -117,6 +118,7 @@ def register_userbot(client, pool):
                             "ad-filter: skip post msg=%s from %s -> dest %s",
                             msg_id, chat_id, row["dest_chat_id"],
                         )
+                        trace.post_drop(chat_id, row["dest_chat_id"], msg_id, "ad-filter", event.message.message or "")
                         await db.update_source_last_msg(
                             pool, row["source_id"], msg_id
                         )
@@ -134,6 +136,7 @@ def register_userbot(client, pool):
                         "dedup: skip post msg=%s from %s -> dest %s",
                         msg_id, chat_id, row["dest_chat_id"],
                     )
+                    trace.post_drop(chat_id, row["dest_chat_id"], msg_id, "dedup", event.message.message or "")
                     await db.update_source_last_msg(
                         pool, row["source_id"], msg_id
                     )
@@ -162,6 +165,7 @@ def register_userbot(client, pool):
                     log.warning(
                         "publish to dest %s failed: %s", row["dest_chat_id"], exc
                     )
+                    trace.post_fail(chat_id, row["dest_chat_id"], msg_id, exc)
         except Exception as exc:  # noqa: BLE001
             log.warning("userbot handler error: %s", exc)
 
@@ -218,6 +222,7 @@ def register_userbot(client, pool):
                         "skipping forwarded album from %s -> dest %s",
                         chat_id, row["dest_chat_id"],
                     )
+                    trace.post_drop(chat_id, row["dest_chat_id"], rep_id, "forwarded")
                     await db.update_source_last_msg(pool, row["source_id"], max_id)
                     continue
                 # Runtime ad filter: skip the whole album when its caption
@@ -232,6 +237,7 @@ def register_userbot(client, pool):
                             "ad-filter: skip album ids=%s-%s from %s -> dest %s",
                             rep_id, max_id, chat_id, row["dest_chat_id"],
                         )
+                        trace.post_drop(chat_id, row["dest_chat_id"], rep_id, "ad-filter", album_text)
                         await db.update_source_last_msg(
                             pool, row["source_id"], max_id
                         )
@@ -248,6 +254,7 @@ def register_userbot(client, pool):
                         "dedup: skip album ids=%s-%s from %s -> dest %s",
                         rep_id, max_id, chat_id, row["dest_chat_id"],
                     )
+                    trace.post_drop(chat_id, row["dest_chat_id"], rep_id, "dedup", " ".join(m.message or "" for m in msgs))
                     await db.update_source_last_msg(
                         pool, row["source_id"], max_id
                     )
@@ -278,5 +285,6 @@ def register_userbot(client, pool):
                         "album publish to dest %s failed: %s",
                         row["dest_chat_id"], exc,
                     )
+                    trace.post_fail(chat_id, row["dest_chat_id"], rep_id, exc)
         except Exception as exc:  # noqa: BLE001
             log.warning("userbot album handler error: %s", exc)

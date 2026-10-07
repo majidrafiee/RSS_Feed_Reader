@@ -10,6 +10,7 @@ from app.formatting import (
 )
 from app.i18n import t
 from app.links import post_link
+from app import trace
 
 log = logging.getLogger("publisher")
 
@@ -385,6 +386,12 @@ async def publish_tg(client, dest_chat_id, meta, message):
     dest = await resolve_dest(client, dest_chat_id, meta.get("dest_username"))
     body = strip_source_signature(message.message or "")
 
+    # Trace: detect empty-body posts (diagnostic for the empty-post issue).
+    if not body.strip():
+        trace.post_empty(src_username or src_tg_id, dest_chat_id, msg_id, message.message or "")
+    else:
+        trace.post_recv(src_username or src_tg_id, dest_chat_id, msg_id, body, via="live")
+
     # A MessageMediaWebPage is just an auto-generated link preview, NOT an
     # attachable file — trying to send_file() it raises "Cannot use ... as
     # file" and we'd fall back to an ugly forward. Treat it as a plain text
@@ -447,9 +454,11 @@ async def publish_tg(client, dest_chat_id, meta, message):
             "%s STEP4 sent OK: first_msg_id=%s last_msg_id=%s",
             tag, getattr(first_msg, "id", None), getattr(last_msg, "id", None),
         )
+        trace.post_pub(src_username or src_tg_id, dest_chat_id, msg_id, getattr(first_msg, "id", None))
     except Exception as exc:  # noqa: BLE001
         log.warning("%s STEP4 styled publish FAILED (%s); forwarding instead",
                     tag, exc)
+        trace.post_fail(src_username or src_tg_id, dest_chat_id, msg_id, f"styled publish failed, forwarded: {exc}")
         await client.forward_messages(dest, message)
         return
 
@@ -506,6 +515,13 @@ async def publish_tg_album(client, dest_chat_id, meta, messages):
             break
     body = strip_source_signature(raw_caption)
     caption = body + source_line
+
+    # Trace the album caption.
+    if not body.strip():
+        trace.post_empty(src_username or src_tg_id, dest_chat_id, rep_id, raw_caption)
+    else:
+        trace.post_recv(src_username or src_tg_id, dest_chat_id, rep_id, body, via="live-album")
+
     # Album captions obey the 1024-char caption limit.
     if len(strip_html(caption)) > 1024:
         caption = truncate(body, 900) + source_line
@@ -532,9 +548,11 @@ async def publish_tg_album(client, dest_chat_id, meta, messages):
             "%s STEP4 album sent OK: first_msg_id=%s items=%d",
             tag, getattr(first_msg, "id", None), len(media),
         )
+        trace.post_pub(src_username or src_tg_id, dest_chat_id, rep_id, getattr(first_msg, "id", None))
     except Exception as exc:  # noqa: BLE001
         log.warning("%s STEP4 album publish FAILED (%s); forwarding instead",
                     tag, exc)
+        trace.post_fail(src_username or src_tg_id, dest_chat_id, rep_id, f"album publish failed, forwarded: {exc}")
         try:
             await client.forward_messages(dest, messages)
         except Exception as exc2:  # noqa: BLE001
@@ -590,6 +608,14 @@ async def publish_rss(client, dest_chat_id, meta, entry):
     summary = _clean_rss_summary(entry)
     image = _entry_image(entry)
 
+    # Trace the RSS item.
+    src_label = meta.get("source_label", "rss")
+    entry_text = f"{title} {summary}".strip()
+    if not entry_text:
+        trace.post_empty(src_label, dest_chat_id, "rss", "")
+    else:
+        trace.post_recv(src_label, dest_chat_id, "rss", entry_text, via="rss")
+
     # Source credit goes at the BOTTOM, linked to the article.
     source_line = _source_line(
         meta.get("source_label"), link, lang, show_title, link_title
@@ -635,6 +661,7 @@ async def publish_rss(client, dest_chat_id, meta, entry):
         meta.get("dest_username"), dest_chat_id, meta.get("dest_title"),
         first_msg.id if first_msg else None, dest_show_username,
     )
+    trace.post_pub(src_label, dest_chat_id, "rss", getattr(first_msg, "id", None))
     await _add_footer(
         client, dest, last_msg, footer, base_html=last_html, tag="[rss]"
     )

@@ -5,6 +5,7 @@ import feedparser
 
 from app import db
 from app import dedup
+from app import trace
 from app.formatting import matches_ad_filter
 from app.publisher import publish_rss
 
@@ -126,6 +127,7 @@ async def poll_all_feeds(pool, client):
                         "ad-filter: skip rss item src=%s guid=%s",
                         src["id"], guid,
                     )
+                    trace.post_drop(src.get("label", src["id"]), src["dest_chat_id"], guid, "ad-filter", entry_text)
                     await db.mark_seen(pool, src["id"], guid)
                     continue
             # Near-duplicate suppression across sources sharing a destination.
@@ -143,6 +145,7 @@ async def poll_all_feeds(pool, client):
                     "dedup: skip rss item src=%s guid=%s",
                     src["id"], guid,
                 )
+                trace.post_drop(src.get("label", src["id"]), src["dest_chat_id"], guid, "dedup", " ".join(str(entry.get(k, "") or "") for k in ("title", "summary", "description")))
                 await db.mark_seen(pool, src["id"], guid)
                 continue
             try:
@@ -151,3 +154,4 @@ async def poll_all_feeds(pool, client):
                 await asyncio.sleep(1)  # be gentle with rate limits
             except Exception as exc:  # noqa: BLE001
                 log.warning("publish rss failed: %s", exc)
+                trace.post_fail(src.get("label", src["id"]), src["dest_chat_id"], guid, exc)

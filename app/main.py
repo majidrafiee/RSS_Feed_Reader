@@ -10,14 +10,13 @@ from telethon.sessions import StringSession
 from app import config, db, scheduling
 from app.backfill import backfill_tg_sources
 from app.bot import router
+from app.logconf import setup as _log_setup
 from app.rss import poll_all_feeds
 from app.publisher import prime_destinations
 from app.userbot import register_userbot
 
-logging.basicConfig(
-    level=logging.INFO,
-    format="%(asctime)s %(levelname)s %(name)s: %(message)s",
-)
+# Central logging: stderr + rotating file. Must run before any getLogger().
+_log_setup()
 log = logging.getLogger("main")
 
 
