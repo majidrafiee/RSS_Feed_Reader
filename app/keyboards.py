@@ -198,7 +198,7 @@ def ad_clean_confirm_kb(lang: str = "en") -> InlineKeyboardMarkup:
 
 
 DEDUP_WINDOWS = [15, 30, 60, 180, 360]
-DEDUP_THRESHOLDS = [80, 85, 90, 95]
+DEDUP_THRESHOLDS = [50, 55, 60, 65, 70, 75, 80, 85, 90, 95]
 DEDUP_MIN_LENS = [10, 20, 40, 80]
 
 
@@ -243,9 +243,11 @@ def dedup_window_kb(lang: str = "en") -> InlineKeyboardMarkup:
 
 
 def dedup_threshold_kb(lang: str = "en") -> InlineKeyboardMarkup:
-    rows = [[InlineKeyboardButton(
+    # Lay the options out two-per-row so a long list (50%..95%) stays compact.
+    buttons = [InlineKeyboardButton(
         text=t(lang, "btn_dedup_threshold_opt", pct=p),
-        callback_data=f"dedup_threshold:{p}")] for p in DEDUP_THRESHOLDS]
+        callback_data=f"dedup_threshold:{p}") for p in DEDUP_THRESHOLDS]
+    rows = [buttons[i:i + 2] for i in range(0, len(buttons), 2)]
     rows.append([InlineKeyboardButton(text=t(lang, "btn_back"), callback_data="dedup")])
     return InlineKeyboardMarkup(inline_keyboard=rows)
 

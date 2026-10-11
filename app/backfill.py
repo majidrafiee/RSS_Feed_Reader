@@ -61,8 +61,35 @@ async def _backfill_one(pool, client, chat_id, dest_rows):
     try:
         entity = await client.get_input_entity(chat_id)
     except Exception as exc:  # noqa: BLE001
-        log.info("backfill: cannot resolve source %s (%s); skipping", chat_id, exc)
-        return
+        # A freshly generated StringSession starts with an EMPTY entity cache
+        # (Telethon's "address book" of channel -> access_hash). Resolving a
+        # channel by its numeric id then fails until Telethon has seen that
+        # channel once. Fall back to the stored public @username, which
+        # resolves WITHOUT a cached access_hash and also warms the cache so
+        # the numeric lookup works on the next sweep.
+        username = next(
+            (r["source_username"] for r in dest_rows if r["source_username"]),
+            None,
+        )
+        if not username:
+            log.info(
+                "backfill: cannot resolve source %s (%s) and no @username on "
+                "record \u2014 will resolve once a live post caches it; "
+                "skipping", chat_id, exc,
+            )
+            return
+        try:
+            entity = await client.get_input_entity(username)
+            log.info(
+                "backfill: resolved source %s via @%s (fresh-session cache was "
+                "empty)", chat_id, username,
+            )
+        except Exception as exc2:  # noqa: BLE001
+            log.info(
+                "backfill: cannot resolve source %s by id (%s) nor @%s (%s); "
+                "skipping", chat_id, exc, username, exc2,
+            )
+            return
 
     # Fetch newest first, then replay oldest->newest.
     missed = []

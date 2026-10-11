@@ -1,4 +1,5 @@
 import logging
+import os
 from urllib.parse import urlparse
 
 from aiogram import F, Router
@@ -7,7 +8,7 @@ from aiogram.exceptions import TelegramBadRequest, TelegramNetworkError
 from aiogram.filters import CommandStart, Command
 from aiogram.fsm.context import FSMContext
 from aiogram.fsm.state import State, StatesGroup
-from aiogram.types import CallbackQuery, ErrorEvent, Message
+from aiogram.types import CallbackQuery, ErrorEvent, FSInputFile, Message
 from telethon import utils
 from telethon.tl.functions.channels import JoinChannelRequest
 
@@ -875,3 +876,72 @@ async def cb_status(cb: CallbackQuery, pool,
     )
     await _safe_edit(cb, text, reply_markup=main_menu(lang, alive=alive))
     await cb.answer()
+
+
+def _log_paths():
+    """Return existing log files (current + rotated backups), newest first."""
+    log_dir = os.environ.get("LOG_DIR", "data")
+    base = os.path.join(log_dir, "bot.log")
+    paths = []
+    if os.path.exists(base):
+        paths.append(base)
+    # Rotated backups: bot.log.1, bot.log.2, ...
+    i = 1
+    while True:
+        p = f"{base}.{i}"
+        if os.path.exists(p):
+            paths.append(p)
+            i += 1
+        else:
+            break
+    return paths
+
+
+@router.message(Command("log"))
+async def cmd_log(message: Message, pool):
+    """Send the bot's log file(s) to the owner as downloadable .txt documents.
+
+    Usage:
+      /log         -> send the full log file(s)
+      /log empty   -> send only the lines about empty/dropped posts
+    """
+    lang = await _lang(pool, message.from_user.id)
+    arg = (message.text or "").partition(" ")[2].strip().lower()
+    paths = _log_paths()
+    if not paths:
+        await message.answer(t(lang, "log_none"))
+        return
+
+    # Filtered view: just the empty/dropped-post trace lines.
+    if arg in ("empty", "drop", "dropped"):
+        needles = ("POST_EMPTY", "POST_DROP", "empty", "dedup", "DROP")
+        lines = []
+        for p in reversed(paths):  # oldest -> newest for chronological order
+            try:
+                with open(p, "r", encoding="utf-8", errors="replace") as fh:
+                    for line in fh:
+                        if any(n in line for n in needles):
+                            lines.append(line.rstrip("\n"))
+            except OSError:
+                continue
+        if not lines:
+            await message.answer(t(lang, "log_empty_none"))
+            return
+        tmp = os.path.join(os.environ.get("LOG_DIR", "data"), "bot_empty.txt")
+        with open(tmp, "w", encoding="utf-8") as fh:
+            fh.write("\n".join(lines) + "\n")
+        await message.answer_document(
+            FSInputFile(tmp, filename="bot_empty_posts.txt"),
+            caption=t(lang, "log_empty_caption", n=len(lines)),
+        )
+        return
+
+    # Full log(s): send each file as a document.
+    for p in paths:
+        try:
+            await message.answer_document(
+                FSInputFile(p, filename=os.path.basename(p) + ".txt"),
+                caption=t(lang, "log_caption", name=os.path.basename(p)),
+            )
+        except Exception as exc:  # noqa: BLE001 - surface the reason to the owner
+            await message.answer(t(lang, "log_send_err", err=str(exc)))

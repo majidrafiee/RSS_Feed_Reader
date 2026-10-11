@@ -200,6 +200,11 @@ T = {
             "\u2022 Destinations tracked: <b>{dedup_tracked}</b>"
         ),
         "status_err_line": "\u26A0\uFE0F <i>{err_detail}</i>\n",
+        "log_none": "\U0001F4C4 No log file found yet. Logs appear once the bot has been running for a bit.",
+        "log_caption": "\U0001F4C4 Log file: {name}",
+        "log_send_err": "\u26A0\uFE0F Could not send the log: {err}",
+        "log_empty_none": "\u2705 No empty/dropped-post lines found in the log.",
+        "log_empty_caption": "\U0001F50D Empty/dropped-post lines ({n} found)",
     },
     "fa": {
         "welcome": (
@@ -361,6 +366,11 @@ T = {
             "\u2022 \u0645\u0642\u0635\u062f\u0647\u0627\u06cc \u067e\u06cc\u06af\u06cc\u0631\u06cc: <b>{dedup_tracked}</b>"
         ),
         "status_err_line": "\u26A0\uFE0F <i>{err_detail}</i>\n",
+        "log_none": "\U0001F4C4 \u0647\u0646\u0648\u0632 \u0641\u0627\u06cc\u0644 \u0644\u0627\u06af\u06cc \u0648\u062c\u0648\u062f \u0646\u062f\u0627\u0631\u062f. \u0644\u0627\u06af \u067e\u0633 \u0627\u0632 \u06a9\u0645\u06cc \u0627\u062c\u0631\u0627\u06cc \u0631\u0628\u0627\u062a \u0633\u0627\u062e\u062a\u0647 \u0645\u06cc\u200c\u0634\u0648\u062f.",
+        "log_caption": "\U0001F4C4 \u0641\u0627\u06cc\u0644 \u0644\u0627\u06af: {name}",
+        "log_send_err": "\u26A0\uFE0F \u0627\u0631\u0633\u0627\u0644 \u0644\u0627\u06af \u0645\u0645\u06a9\u0646 \u0646\u0634\u062f: {err}",
+        "log_empty_none": "\u2705 \u0647\u06cc\u0686 \u062e\u0637 \u0645\u0631\u0628\u0648\u0637 \u0628\u0647 \u067e\u0633\u062a \u062e\u0627\u0644\u06cc/\u062d\u0630\u0641\u200c\u0634\u062f\u0647 \u062f\u0631 \u0644\u0627\u06af \u067e\u06cc\u062f\u0627 \u0646\u0634\u062f.",
+        "log_empty_caption": "\U0001F50D \u062e\u0637\u0648\u0637 \u067e\u0633\u062a \u062e\u0627\u0644\u06cc/\u062d\u0630\u0641\u200c\u0634\u062f\u0647 ({n} \u0645\u0648\u0631\u062f)",
     },
 }
 
