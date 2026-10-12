@@ -112,32 +112,59 @@ def strip_source_signature(text: str) -> str:
     it contains at least one real link/handle/domain. That safety rule means a
     normal closing sentence (even one that happens to match a CTA phrase) is
     never deleted when there is no link to justify it.
+
+    SAFETY: stripping must never erase the whole post. A short single-line
+    caption that merely *starts* with a camera emoji (📷/🎥 ...) or *ends* with
+    a 👇 "see below" arrow would otherwise be misread as a photo-credit / CTA
+    footer and deleted together with the @handle below it, leaving an empty
+    post. If the aggressive strip empties the body, we fall back to a
+    conservative strip that removes only the trailing pure-link/blank lines and
+    keeps that content line.
     """
     if not text:
         return text
     lines = text.split("\n")
-    i = len(lines) - 1
-    block_start = len(lines)
-    has_link = False
-    while i >= 0:
-        s = lines[i].strip()
-        if s == "":
-            block_start = i
-            i -= 1
-            continue
-        if _is_link_line(lines[i]):
-            has_link = True
-            block_start = i
-            i -= 1
-            continue
-        if _is_cta_line(lines[i]) or _is_photo_credit_line(lines[i]):
-            block_start = i
-            i -= 1
-            continue
-        break  # real content line — stop
+
+    def _scan(count_cta_photo):
+        """Return (block_start, has_link) for the trailing footer block.
+        When count_cta_photo is False, CTA / photo-credit lines are treated as
+        real content (not footer) so they are never consumed."""
+        i = len(lines) - 1
+        block_start = len(lines)
+        has_link = False
+        while i >= 0:
+            s = lines[i].strip()
+            if s == "":
+                block_start = i
+                i -= 1
+                continue
+            if _is_link_line(lines[i]):
+                has_link = True
+                block_start = i
+                i -= 1
+                continue
+            if count_cta_photo and (
+                _is_cta_line(lines[i]) or _is_photo_credit_line(lines[i])
+            ):
+                block_start = i
+                i -= 1
+                continue
+            break  # real content line — stop
+        return block_start, has_link
+
+    block_start, has_link = _scan(count_cta_photo=True)
     if not has_link:
         return text.rstrip()
-    return "\n".join(lines[:block_start]).rstrip()
+    candidate = "\n".join(lines[:block_start]).rstrip()
+    if candidate.strip():
+        return candidate
+    # Aggressive strip wiped everything — retry without eating CTA/photo lines
+    # so the real (misclassified) content line survives.
+    block_start, has_link = _scan(count_cta_photo=False)
+    if not has_link:
+        return text.rstrip()
+    candidate = "\n".join(lines[:block_start]).rstrip()
+    return candidate if candidate.strip() else text.rstrip()
 
 
 def esc(text: str) -> str:
