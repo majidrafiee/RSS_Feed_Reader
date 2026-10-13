@@ -18,6 +18,7 @@ from app.i18n import t
 from app.keyboards import (
     ad_clean_confirm_kb,
     ad_filter_kb,
+    ad_words_kb,
     dedup_kb,
     dedup_minlen_kb,
     dedup_threshold_kb,
@@ -31,6 +32,7 @@ from app.keyboards import (
     settings_kb,
     setup_kb,
     source_edit_kb,
+    source_pause_kb,
     sources_manage_kb,
     test_dest_kb,
 )
@@ -85,6 +87,10 @@ class EditSourceName(StatesGroup):
 
 class AddFilter(StatesGroup):
     waiting_input = State()
+
+
+class PauseSource(StatesGroup):
+    waiting_minutes = State()
 
 
 async def _lang(pool, tg_id, fallback="en"):
@@ -361,6 +367,23 @@ def _source_handle(src):
     return ident if len(ident) <= 60 else ident[:57] + "…"
 
 
+def _source_pstatus(src, lang):
+    """Human-readable pause/active status line for one source."""
+    try:
+        is_paused = bool(src["is_paused"])
+    except (KeyError, IndexError, TypeError):
+        is_paused = False
+    if not is_paused:
+        return t(lang, "src_status_active")
+    try:
+        mins = src["paused_minutes_left"]
+    except (KeyError, IndexError, TypeError):
+        mins = None
+    if not mins:
+        return t(lang, "src_status_paused_inf")
+    return t(lang, "src_status_paused_timed", mins=mins)
+
+
 def _source_edit_text(src, lang):
     """Render the edit-menu body for one source (name, handle/@username,
     destination, and the current ON/OFF state of each display option)."""
@@ -371,6 +394,7 @@ def _source_edit_text(src, lang):
         name=esc(src["effective_label"] or ""),
         handle=esc(_source_handle(src)),
         dest=esc(src["dest_title"] or ""),
+        pstatus=_source_pstatus(src, lang),
         show=on if src["show_title"] else off,
         link=on if src["link_title"] else off,
     )
@@ -467,6 +491,115 @@ async def on_source_rename(message: Message, state: FSMContext, pool):
     await message.answer(
         _source_edit_text(src, lang), reply_markup=source_edit_kb(src, lang)
     )
+
+
+# ---------------------------------------------------------------------------
+# Per-source pause / resume. A paused source skips its new posts (and keeps the
+# read position moving forward) so resuming never floods the channel. Pause can
+# be indefinite (until the owner resumes) or for a chosen number of minutes.
+# ---------------------------------------------------------------------------
+
+
+@router.callback_query(F.data.startswith("src_pause:"))
+async def cb_src_pause(cb: CallbackQuery, state: FSMContext, pool):
+    await state.clear()
+    lang = await _lang(pool, cb.from_user.id)
+    src_id = int(cb.data.split(":", 1)[1])
+    src = await db.get_source_detail(pool, src_id, cb.from_user.id)
+    if not src:
+        await cb.answer(t(lang, "cancelled"), show_alert=False)
+        await _show_sources(cb, pool, lang)
+        return
+    await _safe_edit(
+        cb, t(lang, "src_pause_menu", name=esc(src["effective_label"] or "")),
+        reply_markup=source_pause_kb(src_id, lang),
+    )
+    await cb.answer()
+
+
+@router.callback_query(F.data.startswith("src_pause_inf:"))
+async def cb_src_pause_inf(cb: CallbackQuery, pool):
+    lang = await _lang(pool, cb.from_user.id)
+    src_id = int(cb.data.split(":", 1)[1])
+    await db.pause_source(pool, src_id, cb.from_user.id, minutes=None)
+    src = await db.get_source_detail(pool, src_id, cb.from_user.id)
+    name = esc(src["effective_label"] or "") if src else ""
+    await cb.answer(t(lang, "src_paused_inf", name=name), show_alert=False)
+    await _show_source_edit(cb, pool, lang, src_id)
+
+
+@router.callback_query(F.data.startswith("src_pause_min:"))
+async def cb_src_pause_min(cb: CallbackQuery, pool):
+    lang = await _lang(pool, cb.from_user.id)
+    _, src_id_s, mins_s = cb.data.split(":", 2)
+    src_id = int(src_id_s)
+    mins = int(mins_s)
+    await db.pause_source(pool, src_id, cb.from_user.id, minutes=mins)
+    src = await db.get_source_detail(pool, src_id, cb.from_user.id)
+    name = esc(src["effective_label"] or "") if src else ""
+    await cb.answer(
+        t(lang, "src_paused_timed", name=name, mins=mins), show_alert=False)
+    await _show_source_edit(cb, pool, lang, src_id)
+
+
+@router.callback_query(F.data.startswith("src_pause_custom:"))
+async def cb_src_pause_custom(cb: CallbackQuery, state: FSMContext, pool):
+    lang = await _lang(pool, cb.from_user.id)
+    src_id = int(cb.data.split(":", 1)[1])
+    src = await db.get_source_detail(pool, src_id, cb.from_user.id)
+    if not src:
+        await cb.answer(t(lang, "cancelled"), show_alert=False)
+        await _show_sources(cb, pool, lang)
+        return
+    await state.set_state(PauseSource.waiting_minutes)
+    await state.update_data(src_id=src_id)
+    await _safe_edit(
+        cb, t(lang, "src_pause_custom_prompt",
+              name=esc(src["effective_label"] or "")),
+        reply_markup=nav_kb(lang, back_to=f"src_pause:{src_id}"),
+    )
+    await cb.answer()
+
+
+@router.message(PauseSource.waiting_minutes)
+async def on_source_pause_minutes(message: Message, state: FSMContext, pool):
+    lang = await _lang(pool, message.from_user.id)
+    data = await state.get_data()
+    src_id = data.get("src_id")
+    raw = (message.text or "").strip()
+    try:
+        mins = int(raw)
+    except (TypeError, ValueError):
+        mins = 0
+    if src_id is None:
+        await state.clear()
+        await message.answer(t(lang, "cancelled"), reply_markup=main_menu(lang))
+        return
+    if mins <= 0:
+        await message.answer(t(lang, "src_pause_bad_minutes"))
+        return
+    await state.clear()
+    src = await db.pause_source(pool, src_id, message.from_user.id, minutes=mins)
+    src = await db.get_source_detail(pool, src_id, message.from_user.id)
+    if src is None:
+        await message.answer(t(lang, "cancelled"), reply_markup=main_menu(lang))
+        return
+    name = esc(src["effective_label"] or "")
+    await message.answer(t(lang, "src_paused_timed", name=name, mins=mins))
+    await message.answer(
+        _source_edit_text(src, lang), reply_markup=source_edit_kb(src, lang)
+    )
+
+
+@router.callback_query(F.data.startswith("src_resume:"))
+async def cb_src_resume(cb: CallbackQuery, pool):
+    lang = await _lang(pool, cb.from_user.id)
+    src_id = int(cb.data.split(":", 1)[1])
+    await db.resume_source(pool, src_id, cb.from_user.id)
+    src = await db.get_source_detail(pool, src_id, cb.from_user.id)
+    name = esc(src["effective_label"] or "") if src else ""
+    await cb.answer(t(lang, "src_resumed", name=name), show_alert=False)
+    await _show_source_edit(cb, pool, lang, src_id)
 
 
 @router.callback_query(F.data.startswith("test_dest:"))
@@ -688,13 +821,21 @@ async def cb_dedup_minlen_chosen(cb: CallbackQuery, pool):
 
 
 async def _ad_filter_view(pool, owner, lang):
-    """Build the ad-filter menu text + keyboard for this owner."""
+    """Build the ad-filter MAIN menu text + keyboard for this owner."""
     settings = await db.get_settings(pool, owner)
     filters = await db.list_ad_filters(pool, owner)
     status = t(lang, "on") if settings["ad_filter_enabled"] else t(lang, "off")
     hint = "" if filters else t(lang, "ad_filter_hint_empty")
     text = t(lang, "ad_filter_title", status=status, hint=hint)
     return text, ad_filter_kb(settings, filters, lang)
+
+
+async def _ad_words_view(pool, owner, lang):
+    """Build the block-words SUB-menu text + keyboard for this owner."""
+    filters = await db.list_ad_filters(pool, owner)
+    hint = "" if filters else t(lang, "ad_filter_hint_empty")
+    text = t(lang, "ad_words_title", hint=hint)
+    return text, ad_words_kb(filters, lang)
 
 
 @router.callback_query(F.data == "ad_filter")
@@ -715,13 +856,22 @@ async def cb_ad_toggle(cb: CallbackQuery, pool):
     await cb.answer(t(lang, "saved"))
 
 
+@router.callback_query(F.data == "ad_words")
+async def cb_ad_words(cb: CallbackQuery, state: FSMContext, pool):
+    await state.clear()
+    lang = await _lang(pool, cb.from_user.id)
+    text, kb = await _ad_words_view(pool, cb.from_user.id, lang)
+    await _safe_edit(cb, text, reply_markup=kb)
+    await cb.answer()
+
+
 @router.callback_query(F.data == "ad_add")
 async def cb_ad_add(cb: CallbackQuery, state: FSMContext, pool):
     lang = await _lang(pool, cb.from_user.id)
     await state.set_state(AddFilter.waiting_input)
     await _safe_edit(
         cb, t(lang, "ad_add_prompt"),
-        reply_markup=nav_kb(lang, back_to="ad_filter"),
+        reply_markup=nav_kb(lang, back_to="ad_words"),
     )
     await cb.answer()
 
@@ -743,7 +893,7 @@ async def on_ad_filter_input(message: Message, state: FSMContext, pool):
         await message.answer(t(lang, "ad_added", count=added))
     else:
         await message.answer(t(lang, "ad_added_none"))
-    text, kb = await _ad_filter_view(pool, message.from_user.id, lang)
+    text, kb = await _ad_words_view(pool, message.from_user.id, lang)
     await message.answer(text, reply_markup=kb)
 
 
@@ -752,7 +902,7 @@ async def cb_ad_del(cb: CallbackQuery, pool):
     lang = await _lang(pool, cb.from_user.id)
     filter_id = int(cb.data.split(":", 1)[1])
     row = await db.delete_ad_filter(pool, cb.from_user.id, filter_id)
-    text, kb = await _ad_filter_view(pool, cb.from_user.id, lang)
+    text, kb = await _ad_words_view(pool, cb.from_user.id, lang)
     await _safe_edit(cb, text, reply_markup=kb)
     if row is not None:
         await cb.answer(t(lang, "ad_deleted", pattern=row["pattern"]))

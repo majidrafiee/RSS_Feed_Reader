@@ -97,7 +97,8 @@ T = {
             "\u2699\uFE0F <b>Edit source</b>\n\n"
             "Name: <b>{name}</b>\n"
             "Handle: <b>{handle}</b>\n"
-            "Destination: <b>{dest}</b>\n\n"
+            "Destination: <b>{dest}</b>\n"
+            "Status: <b>{pstatus}</b>\n\n"
             "\u2022 <b>Show source name</b>: {show}\n"
             "\u2022 <b>Hyperlink the name</b>: {link}\n\n"
             "<i>The hyperlink only appears when the source name is shown.</i>"
@@ -108,11 +109,38 @@ T = {
         ),
         "source_name_saved": "\u2705 Source name changed to: <b>{name}</b>",
         "source_name_reset": "\u267B\uFE0F Source name reset to default: <b>{name}</b>",
+        "src_status_active": "\u25B6\uFE0F Active",
+        "src_status_paused_inf": "\u23F8\uFE0F Paused (until resumed)",
+        "src_status_paused_timed": "\u23F8\uFE0F Paused ({mins} min left)",
+        "btn_src_pause": "\u23F8\uFE0F Pause this source",
+        "btn_src_resume": "\u25B6\uFE0F Resume this source",
+        "btn_src_pause_inf": "\u23F8\uFE0F Pause until I resume",
+        "btn_src_pause_min": "{mins} min",
+        "btn_src_pause_custom": "\u270F\uFE0F Custom minutes",
+        "src_pause_menu": (
+            "\u23F8\uFE0F <b>Pause source</b>\n\n"
+            "Choose how long to pause <b>{name}</b>. While paused, new posts "
+            "from this source are skipped and will not be sent later."
+        ),
+        "src_pause_custom_prompt": (
+            "\u270F\uFE0F Send the number of minutes to pause <b>{name}</b>.\n\n"
+            "<i>Enter a whole number greater than 0.</i>"
+        ),
+        "src_pause_bad_minutes": "\u26A0\uFE0F Please send a whole number of minutes greater than 0.",
+        "src_paused_inf": "\u23F8\uFE0F <b>{name}</b> is paused until you resume it.",
+        "src_paused_timed": "\u23F8\uFE0F <b>{name}</b> is paused for {mins} minute(s).",
+        "src_resumed": "\u25B6\uFE0F <b>{name}</b> is active again.",
         "btn_ad_filter": "\U0001F9F9 Ad filter",
         "btn_ad_on": "\U0001F7E2 Ad filter: ON",
         "btn_ad_off": "\u26AA Ad filter: OFF",
         "btn_ad_add": "\u2795 Add block word / @handle / #hashtag",
         "btn_ad_item": "\U0001F5D1 {pattern}",
+        "btn_ad_words": "\U0001F4DD Block words & phrases ({n})",
+        "ad_words_title": (
+            "\U0001F4DD <b>Block words & phrases</b>\n\n"
+            "These words, <code>@handles</code> and <code>#hashtags</code> are "
+            "blocked while the ad filter is on. Tap a pattern to remove it.{hint}"
+        ),
         "btn_ad_clean": "\U0001F9FD Clean existing ads",
         "btn_ad_clean_yes": "\u2705 Yes, delete them",
         "btn_ad_clean_no": "\u2B05\uFE0F No, go back",
@@ -300,7 +328,8 @@ T = {
             "\u2699\uFE0F <b>\u0648\u06CC\u0631\u0627\u06CC\u0634 \u0645\u0646\u0628\u0639</b>\n\n"
             "\u0646\u0627\u0645: <b>{name}</b>\n"
             "\u0634\u0646\u0627\u0633\u0647: <b>{handle}</b>\n"
-            "\u0645\u0642\u0635\u062F: <b>{dest}</b>\n\n"
+            "\u0645\u0642\u0635\u062F: <b>{dest}</b>\n"
+            "\u0648\u0636\u0639\u06CC\u062A: <b>{pstatus}</b>\n\n"
             "\u2022 <b>\u0646\u0645\u0627\u06CC\u0634 \u0646\u0627\u0645 \u0645\u0646\u0628\u0639</b>: {show}\n"
             "\u2022 <b>\u0644\u06CC\u0646\u06A9\u200C\u062F\u0627\u0631 \u0628\u0648\u062F\u0646 \u0646\u0627\u0645</b>: {link}\n\n"
             "<i>\u0644\u06CC\u0646\u06A9 \u0641\u0642\u0637 \u0632\u0645\u0627\u0646\u06CC \u0646\u0634\u0627\u0646 \u062F\u0627\u062F\u0647 \u0645\u06CC\u200C\u0634\u0648\u062F \u06A9\u0647 \u0646\u0627\u0645 \u0645\u0646\u0628\u0639 \u0646\u0645\u0627\u06CC\u0634 \u062F\u0627\u062F\u0647 \u0634\u0648\u062F.</i>"
@@ -311,11 +340,27 @@ T = {
         ),
         "source_name_saved": "\u2705 \u0646\u0627\u0645 \u0645\u0646\u0628\u0639 \u062A\u063A\u06CC\u06CC\u0631 \u06A9\u0631\u062F \u0628\u0647: <b>{name}</b>",
         "source_name_reset": "\u267B\uFE0F \u0646\u0627\u0645 \u0645\u0646\u0628\u0639 \u0628\u0647 \u067E\u06CC\u0634\u200C\u0641\u0631\u0636 \u0628\u0627\u0632\u06AF\u0634\u062A: <b>{name}</b>",
+        "src_status_active": "\u25B6\uFE0F \u0641\u0639\u0627\u0644",
+        "src_status_paused_inf": "\u23F8\uFE0F \u0645\u062A\u0648\u0642\u0641 (\u062A\u0627 \u0632\u0645\u0627\u0646 \u0627\u062F\u0627\u0645\u0647)",
+        "src_status_paused_timed": "\u23F8\uFE0F \u0645\u062A\u0648\u0642\u0641 ({mins} \u062F\u0642\u06CC\u0642\u0647 \u0645\u0627\u0646\u062F\u0647)",
+        "btn_src_pause": "\u23F8\uFE0F \u062A\u0648\u0642\u0641 \u0627\u06CC\u0646 \u0645\u0646\u0628\u0639",
+        "btn_src_resume": "\u25B6\uFE0F \u0627\u062F\u0627\u0645\u0647 \u0627\u06CC\u0646 \u0645\u0646\u0628\u0639",
+        "btn_src_pause_inf": "\u23F8\uFE0F \u062A\u0648\u0642\u0641 \u062A\u0627 \u0627\u062F\u0627\u0645\u0647 \u062F\u0633\u062A\u06CC",
+        "btn_src_pause_min": "{mins} \u062F\u0642\u06CC\u0642\u0647",
+        "btn_src_pause_custom": "\u270F\uFE0F \u062A\u0639\u062F\u0627\u062F \u062F\u0642\u06CC\u0642\u0647 \u062F\u0644\u062E\u0648\u0627\u0647",
+        "src_pause_menu": "\u23F8\uFE0F <b>\u062A\u0648\u0642\u0641 \u0645\u0646\u0628\u0639</b>\n\n\u0645\u062F\u062A \u062A\u0648\u0642\u0641 <b>{name}</b> \u0631\u0627 \u0627\u0646\u062A\u062E\u0627\u0628 \u06A9\u0646\u06CC\u062F. \u062F\u0631 \u0645\u062F\u062A \u062A\u0648\u0642\u0641\u060C \u067E\u0633\u062A\u200C\u0647\u0627\u06CC \u062C\u062F\u06CC\u062F \u0627\u06CC\u0646 \u0645\u0646\u0628\u0639 \u0646\u0627\u062F\u06CC\u062F\u0647 \u06AF\u0631\u0641\u062A\u0647 \u0645\u06CC\u200C\u0634\u0648\u0646\u062F \u0648 \u0628\u0639\u062F\u0627\u064B \u0627\u0631\u0633\u0627\u0644 \u0646\u0645\u06CC\u200C\u0634\u0648\u0646\u062F.",
+        "src_pause_custom_prompt": "\u270F\uFE0F \u062A\u0639\u062F\u0627\u062F \u062F\u0642\u06CC\u0642\u0647 \u062A\u0648\u0642\u0641 <b>{name}</b> \u0631\u0627 \u0628\u0641\u0631\u0633\u062A.\n\n<i>\u06CC\u06A9 \u0639\u062F\u062F \u0635\u062D\u06CC\u062D \u0628\u0632\u0631\u06AF\u062A\u0631 \u0627\u0632 \u06F0 \u0648\u0627\u0631\u062F \u06A9\u0646.</i>",
+        "src_pause_bad_minutes": "\u26A0\uFE0F \u0644\u0637\u0641\u0627\u064B \u06CC\u06A9 \u0639\u062F\u062F \u0635\u062D\u06CC\u062D \u0628\u0632\u0631\u06AF\u062A\u0631 \u0627\u0632 \u06F0 \u0628\u0641\u0631\u0633\u062A.",
+        "src_paused_inf": "\u23F8\uFE0F <b>{name}</b> \u062A\u0627 \u0632\u0645\u0627\u0646\u06CC \u06A9\u0647 \u0627\u062F\u0627\u0645\u0647 \u062F\u0647\u06CC \u0645\u062A\u0648\u0642\u0641 \u0634\u062F.",
+        "src_paused_timed": "\u23F8\uFE0F <b>{name}</b> \u0628\u0647 \u0645\u062F\u062A {mins} \u062F\u0642\u06CC\u0642\u0647 \u0645\u062A\u0648\u0642\u0641 \u0634\u062F.",
+        "src_resumed": "\u25B6\uFE0F <b>{name}</b> \u062F\u0648\u0628\u0627\u0631\u0647 \u0641\u0639\u0627\u0644 \u0634\u062F.",
         "btn_ad_filter": "\U0001f9f9 \u0641\u06cc\u0644\u062a\u0631 \u062a\u0628\u0644\u06cc\u063a\u0627\u062a",
         "btn_ad_on": "\U0001f7e2 \u0641\u06cc\u0644\u062a\u0631 \u062a\u0628\u0644\u06cc\u063a\u0627\u062a: \u0631\u0648\u0634\u0646",
         "btn_ad_off": "\u26aa \u0641\u06cc\u0644\u062a\u0631 \u062a\u0628\u0644\u06cc\u063a\u0627\u062a: \u062e\u0627\u0645\u0648\u0634",
         "btn_ad_add": "\u2795 \u0627\u0641\u0632\u0648\u062f\u0646 \u06a9\u0644\u0645\u0647/\u200f@\u0622\u06cc\u062f\u06cc/\u200f#\u0647\u0634\u062a\u06af \u0645\u0633\u062f\u0648\u062f",
         "btn_ad_item": "\U0001f5d1 {pattern}",
+        "btn_ad_words": "\U0001F4DD \u06A9\u0644\u0645\u0627\u062A \u0648 \u0639\u0628\u0627\u0631\u0627\u062A \u0645\u0633\u062F\u0648\u062F ({n})",
+        "ad_words_title": "\U0001F4DD <b>\u06A9\u0644\u0645\u0627\u062A \u0648 \u0639\u0628\u0627\u0631\u0627\u062A \u0645\u0633\u062F\u0648\u062F</b>\n\n\u0627\u06CC\u0646 \u06A9\u0644\u0645\u0627\u062A\u060C <code>@\u0622\u06CC\u062F\u06CC\u200C\u0647\u0627</code> \u0648 <code>#\u0647\u0634\u062A\u06AF\u200C\u0647\u0627</code> \u062A\u0627 \u0632\u0645\u0627\u0646\u06CC \u06A9\u0647 \u0641\u06CC\u0644\u062A\u0631 \u062A\u0628\u0644\u06CC\u063A\u0627\u062A \u0631\u0648\u0634\u0646 \u0627\u0633\u062A \u0645\u0633\u062F\u0648\u062F \u0645\u06CC\u200C\u0634\u0648\u0646\u062F. \u0628\u0631\u0627\u06CC \u062D\u0630\u0641 \u0631\u0648\u06CC \u0647\u0631 \u0645\u0648\u0631\u062F \u0628\u0632\u0646\u06CC\u062F.{hint}",
         "btn_ad_clean": "\U0001f9fd \u067e\u0627\u06a9\u200c\u0633\u0627\u0632\u06cc \u062a\u0628\u0644\u06cc\u063a\u0627\u062a \u0645\u0648\u062c\u0648\u062f",
         "btn_ad_clean_yes": "\u2705 \u0628\u0644\u0647\u060c \u062d\u0630\u0641 \u0634\u0648\u0646\u062f",
         "btn_ad_clean_no": "\u2b05\ufe0f \u062e\u06cc\u0631\u060c \u0628\u0627\u0632\u06af\u0634\u062a",

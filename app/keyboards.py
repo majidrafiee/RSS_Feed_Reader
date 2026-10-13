@@ -64,7 +64,14 @@ def sources_manage_kb(sources, lang: str = "en") -> InlineKeyboardMarkup:
     for s in sources:
         label = s["label"]
         dtitle = s.get("dest_title")
-        text = f"\u2699\uFE0F {label}"
+        paused = False
+        try:
+            paused = bool(s["is_paused"])
+        except (KeyError, IndexError, TypeError):
+            paused = False
+        # A paused source gets a clear ⏸ marker so the list shows state.
+        icon = "\u23F8\uFE0F" if paused else "\u2699\uFE0F"
+        text = f"{icon} {label}"
         if dtitle:
             text += f" \u2192 {dtitle}"
         rows.append([InlineKeyboardButton(
@@ -95,10 +102,44 @@ def source_edit_kb(src, lang: str = "en") -> InlineKeyboardMarkup:
     if src["has_custom_label"]:
         rows.append([InlineKeyboardButton(
             text=t(lang, "btn_src_resetname"), callback_data=f"src_reset:{sid}")])
+    # Pause / resume: a paused source shows Resume; an active one shows Pause
+    # (which opens the duration sub-menu).
+    try:
+        is_paused = bool(src["is_paused"])
+    except (KeyError, IndexError, TypeError):
+        is_paused = False
+    if is_paused:
+        rows.append([InlineKeyboardButton(
+            text=t(lang, "btn_src_resume"), callback_data=f"src_resume:{sid}")])
+    else:
+        rows.append([InlineKeyboardButton(
+            text=t(lang, "btn_src_pause"), callback_data=f"src_pause:{sid}")])
     rows.append([InlineKeyboardButton(
         text=t(lang, "btn_delete"), callback_data=f"del_src:{sid}")])
     rows.append([InlineKeyboardButton(
         text=t(lang, "btn_back"), callback_data="list_src")])
+    return InlineKeyboardMarkup(inline_keyboard=rows)
+
+
+# Pause-duration options (minutes) offered when pausing a source.
+PAUSE_MINUTES = [30, 60, 180, 360, 720, 1440]
+
+
+def source_pause_kb(src_id, lang: str = "en") -> InlineKeyboardMarkup:
+    """Choose how long to pause a source: indefinitely, a preset number of
+    minutes (two per row), or a custom amount typed by the owner."""
+    rows = [[InlineKeyboardButton(
+        text=t(lang, "btn_src_pause_inf"),
+        callback_data=f"src_pause_inf:{src_id}")]]
+    btns = [InlineKeyboardButton(
+        text=t(lang, "btn_src_pause_min", mins=m),
+        callback_data=f"src_pause_min:{src_id}:{m}") for m in PAUSE_MINUTES]
+    rows += [btns[i:i + 2] for i in range(0, len(btns), 2)]
+    rows.append([InlineKeyboardButton(
+        text=t(lang, "btn_src_pause_custom"),
+        callback_data=f"src_pause_custom:{src_id}")])
+    rows.append([InlineKeyboardButton(
+        text=t(lang, "btn_back"), callback_data=f"src_edit:{src_id}")])
     return InlineKeyboardMarkup(inline_keyboard=rows)
 
 
@@ -163,26 +204,38 @@ def settings_kb(settings, lang: str = "en") -> InlineKeyboardMarkup:
 
 
 def ad_filter_kb(settings, filters, lang: str = "en") -> InlineKeyboardMarkup:
-    """Ad-filter menu: on/off toggle, add, per-pattern delete buttons, a
-    confirm-gated 'clean existing ads' action, and back."""
+    """Ad-filter MAIN menu: just the on/off toggle, a button that opens the
+    block-words sub-menu (with a live count), the confirm-gated 'clean existing
+    ads' action, and back. The actual word list lives in its own sub-menu so
+    this screen stays short and tidy."""
     try:
         enabled = bool(settings["ad_filter_enabled"])
     except (KeyError, IndexError):
         enabled = False
     toggle_key = "btn_ad_on" if enabled else "btn_ad_off"
+    count = len(filters)
     rows = [
         [InlineKeyboardButton(text=t(lang, toggle_key), callback_data="ad_toggle")],
-        [InlineKeyboardButton(text=t(lang, "btn_ad_add"), callback_data="ad_add")],
+        [InlineKeyboardButton(
+            text=t(lang, "btn_ad_words", n=count), callback_data="ad_words")],
+        [InlineKeyboardButton(text=t(lang, "btn_ad_clean"), callback_data="ad_clean")],
+        [InlineKeyboardButton(text=t(lang, "btn_back"), callback_data="settings")],
     ]
+    return InlineKeyboardMarkup(inline_keyboard=rows)
+
+
+def ad_words_kb(filters, lang: str = "en") -> InlineKeyboardMarkup:
+    """Block-words SUB-menu: an Add button on top, then one tappable
+    (delete) button per stored word / @handle / #hashtag, then back to the
+    ad-filter main menu."""
+    rows = [[InlineKeyboardButton(text=t(lang, "btn_ad_add"), callback_data="ad_add")]]
     for f in filters:
         rows.append([InlineKeyboardButton(
             text=t(lang, "btn_ad_item", pattern=f["pattern"]),
             callback_data=f"ad_del:{f['id']}",
         )])
     rows.append([InlineKeyboardButton(
-        text=t(lang, "btn_ad_clean"), callback_data="ad_clean")])
-    rows.append([InlineKeyboardButton(
-        text=t(lang, "btn_back"), callback_data="settings")])
+        text=t(lang, "btn_back"), callback_data="ad_filter")])
     return InlineKeyboardMarkup(inline_keyboard=rows)
 
 

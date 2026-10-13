@@ -166,6 +166,16 @@ async def _backfill_one(pool, client, chat_id, dest_rows):
                 trace.post_drop(chat_id, r["dest_chat_id"], rep_id, "forwarded")
                 await db.update_source_last_msg(pool, r["source_id"], max_id)
                 continue
+            # Per-source pause: skip the recovered post/album AND advance the
+            # watermark so resuming never floods the channel with backlog.
+            if r["is_paused"]:
+                log.info(
+                    "paused: skip backfill src=%s ids=%s-%s -> dest=%s",
+                    chat_id, rep_id, max_id, r["dest_chat_id"],
+                )
+                trace.post_drop(chat_id, r["dest_chat_id"], rep_id, "paused")
+                await db.update_source_last_msg(pool, r["source_id"], max_id)
+                continue
             # Runtime ad filter: skip a recovered post/album whose text matches
             # one of the owner's block patterns.
             if r["ad_filter_enabled"]:

@@ -107,6 +107,16 @@ def register_userbot(client, pool):
                     trace.post_drop(chat_id, row["dest_chat_id"], msg_id, "forwarded", event.message.message or "")
                     await db.update_source_last_msg(pool, row["source_id"], msg_id)
                     continue
+                # Per-source pause: while paused, skip the post AND advance the
+                # watermark so resuming never floods the channel with backlog.
+                if row["is_paused"]:
+                    log.info(
+                        "paused: skip post msg=%s from %s -> dest %s",
+                        msg_id, chat_id, row["dest_chat_id"],
+                    )
+                    trace.post_drop(chat_id, row["dest_chat_id"], msg_id, "paused", event.message.message or "")
+                    await db.update_source_last_msg(pool, row["source_id"], msg_id)
+                    continue
                 # Runtime ad filter: skip a new post whose text matches one of
                 # the owner's block patterns (managed from the bot).
                 if row["ad_filter_enabled"]:
@@ -223,6 +233,16 @@ def register_userbot(client, pool):
                         chat_id, row["dest_chat_id"],
                     )
                     trace.post_drop(chat_id, row["dest_chat_id"], rep_id, "forwarded")
+                    await db.update_source_last_msg(pool, row["source_id"], max_id)
+                    continue
+                # Per-source pause: skip the whole album AND advance the
+                # watermark so resuming never floods the channel with backlog.
+                if row["is_paused"]:
+                    log.info(
+                        "paused: skip album ids=%s-%s from %s -> dest %s",
+                        rep_id, max_id, chat_id, row["dest_chat_id"],
+                    )
+                    trace.post_drop(chat_id, row["dest_chat_id"], rep_id, "paused")
                     await db.update_source_last_msg(pool, row["source_id"], max_id)
                     continue
                 # Runtime ad filter: skip the whole album when its caption

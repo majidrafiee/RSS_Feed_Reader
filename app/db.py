@@ -70,6 +70,13 @@ ALTER TABLE sources ADD COLUMN IF NOT EXISTS last_tg_msg_id BIGINT;
 ALTER TABLE sources ADD COLUMN IF NOT EXISTS custom_label TEXT;
 ALTER TABLE sources ADD COLUMN IF NOT EXISTS show_title BOOLEAN;
 ALTER TABLE sources ADD COLUMN IF NOT EXISTS link_title BOOLEAN;
+-- Per-source pause. `paused` = paused indefinitely until the owner resumes;
+-- `paused_until` = paused only until that moment (timed pause). A source is
+-- EFFECTIVELY paused when paused OR (paused_until IS NOT NULL AND in future).
+-- While paused we skip delivery AND advance the watermark, so resuming does
+-- NOT dump the whole pause gap at once.
+ALTER TABLE sources ADD COLUMN IF NOT EXISTS paused BOOLEAN NOT NULL DEFAULT FALSE;
+ALTER TABLE sources ADD COLUMN IF NOT EXISTS paused_until TIMESTAMPTZ;
 
 -- Runtime-managed ad filter. The owner adds block phrases / @handles /
 -- #hashtags / words through the bot (never hardcoded); when the toggle is on
@@ -338,6 +345,8 @@ async def list_sources_for_owner(pool, owner):
         return await con.fetch(
             "SELECT s.id, s.kind, "
             "       COALESCE(s.custom_label, s.label) AS label, "
+            "       (s.paused OR (s.paused_until IS NOT NULL "
+            "            AND s.paused_until > now())) AS is_paused, "
             "       d.title AS dest_title "
             "FROM sources s JOIN destinations d ON s.destination_id = d.id "
             "WHERE d.owner_tg_id = $1 ORDER BY d.id, s.id",
@@ -374,6 +383,12 @@ async def get_source_detail(pool, source_id, owner):
             "       (s.custom_label IS NOT NULL) AS has_custom_label, "
             "       COALESCE(s.show_title, us.show_title, TRUE) AS show_title, "
             "       COALESCE(s.link_title, us.link_title, TRUE) AS link_title, "
+            "       s.paused AS paused, s.paused_until AS paused_until, "
+            "       (s.paused OR (s.paused_until IS NOT NULL "
+            "            AND s.paused_until > now())) AS is_paused, "
+            "       GREATEST(0, CEIL(EXTRACT(EPOCH FROM "
+            "            (s.paused_until - now())) / 60.0))::int "
+            "            AS paused_minutes_left, "
             "       d.title AS dest_title "
             "FROM sources s JOIN destinations d ON d.id = s.destination_id "
             "LEFT JOIN user_settings us ON us.tg_user_id = d.owner_tg_id "
@@ -437,6 +452,52 @@ async def reset_source_custom_label(pool, source_id, owner):
         )
 
 
+async def pause_source(pool, source_id, owner, minutes=None):
+    """Pause a source (owner-checked).
+
+    minutes=None  -> pause INDEFINITELY (until the owner resumes).
+    minutes=<int> -> pause only until now()+minutes (a timed pause).
+
+    Returns True if a row was updated, False if the source isn't the owner's.
+    """
+    async with pool.acquire() as con:
+        if minutes is None:
+            row = await con.fetchrow(
+                "UPDATE sources s SET paused = TRUE, paused_until = NULL "
+                "FROM destinations d "
+                "WHERE s.id = $1 AND s.destination_id = d.id "
+                "      AND d.owner_tg_id = $2 "
+                "RETURNING s.id",
+                source_id, owner,
+            )
+        else:
+            row = await con.fetchrow(
+                "UPDATE sources s SET paused = FALSE, "
+                "       paused_until = now() + make_interval(mins => $3) "
+                "FROM destinations d "
+                "WHERE s.id = $1 AND s.destination_id = d.id "
+                "      AND d.owner_tg_id = $2 "
+                "RETURNING s.id",
+                source_id, owner, int(minutes),
+            )
+        return row is not None
+
+
+async def resume_source(pool, source_id, owner):
+    """Clear any pause (indefinite or timed) so the source delivers again.
+    Returns True if a row was updated, False if not the owner's."""
+    async with pool.acquire() as con:
+        row = await con.fetchrow(
+            "UPDATE sources s SET paused = FALSE, paused_until = NULL "
+            "FROM destinations d "
+            "WHERE s.id = $1 AND s.destination_id = d.id "
+            "      AND d.owner_tg_id = $2 "
+            "RETURNING s.id",
+            source_id, owner,
+        )
+        return row is not None
+
+
 async def destinations_for_tg_source(pool, tg_chat_id):
     async with pool.acquire() as con:
         return await con.fetch(
@@ -444,6 +505,8 @@ async def destinations_for_tg_source(pool, tg_chat_id):
             "       COALESCE(s.custom_label, s.label) AS source_label, "
             "       s.username AS source_username, "
             "       s.tg_chat_id AS source_tg_id, s.last_tg_msg_id, "
+            "       (s.paused OR (s.paused_until IS NOT NULL "
+            "            AND s.paused_until > now())) AS is_paused, "
             "       d.chat_id AS dest_chat_id, d.username AS dest_username, "
             "       d.title AS dest_title, "
             "       COALESCE(us.skip_forwarded, TRUE) AS skip_forwarded, "
@@ -474,6 +537,8 @@ async def all_tg_sources(pool):
             "       COALESCE(s.custom_label, s.label) AS source_label, "
             "       s.username AS source_username, "
             "       s.tg_chat_id AS source_tg_id, s.last_tg_msg_id, "
+            "       (s.paused OR (s.paused_until IS NOT NULL "
+            "            AND s.paused_until > now())) AS is_paused, "
             "       d.chat_id AS dest_chat_id, d.username AS dest_username, "
             "       d.title AS dest_title, "
             "       COALESCE(us.skip_forwarded, TRUE) AS skip_forwarded, "
