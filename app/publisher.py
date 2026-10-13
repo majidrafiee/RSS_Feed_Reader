@@ -403,6 +403,23 @@ async def publish_tg(client, dest_chat_id, meta, message):
         tag, bool(message.media), is_webpage, has_file,
     )
 
+    # --- GUARD: skip genuinely-empty posts.
+    # If the source message has NO caption/text AND NO attachable media, there
+    # is nothing worth republishing -- we would otherwise send a post that is
+    # just the 'source' credit line + footer, which shows up as an empty post
+    # in the destination channel. (Seen with caption-less service/poll-type
+    # source messages.) Drop it so the watermark still advances past it.
+    if not body.strip() and not has_file:
+        log.info(
+            "%s STEP3b SKIP empty post (no text, no media) -- not republishing",
+            tag,
+        )
+        trace.post_drop(
+            src_username or src_tg_id, dest_chat_id, msg_id,
+            reason="empty_no_media", text_preview=message.message or "",
+        )
+        return
+
     # The source line rides at the END of the (first) message body/caption.
     first_msg = None
     last_msg = None
