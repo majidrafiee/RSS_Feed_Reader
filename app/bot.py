@@ -1,5 +1,6 @@
 import logging
 import os
+from datetime import datetime, timezone
 from urllib.parse import urlparse
 
 from aiogram import F, Router
@@ -19,6 +20,7 @@ from app.keyboards import (
     ad_clean_confirm_kb,
     ad_filter_kb,
     ad_words_kb,
+    bulk_pause_kb,
     dedup_kb,
     dedup_minlen_kb,
     dedup_threshold_kb,
@@ -90,6 +92,10 @@ class AddFilter(StatesGroup):
 
 
 class PauseSource(StatesGroup):
+    waiting_minutes = State()
+
+
+class BulkPause(StatesGroup):
     waiting_minutes = State()
 
 
@@ -487,9 +493,10 @@ async def on_source_rename(message: Message, state: FSMContext, pool):
     if src is None:
         await message.answer(t(lang, "cancelled"), reply_markup=main_menu(lang))
         return
-    await message.answer(t(lang, "source_name_saved", name=esc(saved or new_name)))
     await message.answer(
-        _source_edit_text(src, lang), reply_markup=source_edit_kb(src, lang)
+        t(lang, "source_name_saved", name=esc(saved or new_name))
+        + "\n\n" + _source_edit_text(src, lang),
+        reply_markup=source_edit_kb(src, lang),
     )
 
 
@@ -585,9 +592,10 @@ async def on_source_pause_minutes(message: Message, state: FSMContext, pool):
         await message.answer(t(lang, "cancelled"), reply_markup=main_menu(lang))
         return
     name = esc(src["effective_label"] or "")
-    await message.answer(t(lang, "src_paused_timed", name=name, mins=mins))
     await message.answer(
-        _source_edit_text(src, lang), reply_markup=source_edit_kb(src, lang)
+        t(lang, "src_paused_timed", name=name, mins=mins)
+        + "\n\n" + _source_edit_text(src, lang),
+        reply_markup=source_edit_kb(src, lang),
     )
 
 
@@ -600,6 +608,155 @@ async def cb_src_resume(cb: CallbackQuery, pool):
     name = esc(src["effective_label"] or "") if src else ""
     await cb.answer(t(lang, "src_resumed", name=name), show_alert=False)
     await _show_source_edit(cb, pool, lang, src_id)
+
+
+# ---------------------------------------------------------------------------
+# Bulk pause / resume: pause or resume EVERY source at once (from the sources
+# list) or every source feeding ONE channel (from the destinations list). The
+# controls live on those list messages so the owner never scrolls to find them.
+# ---------------------------------------------------------------------------
+
+
+async def _apply_bulk_pause(pool, owner, target, minutes):
+    """Pause the sources named by `target` ("all" or "dest:<id>"). Returns
+    (kind, name, count) where kind is 'all' or 'dest'."""
+    if target == "all":
+        n = await db.pause_all_sources(pool, owner, minutes)
+        return "all", "", n
+    if target.startswith("dest:"):
+        dest_id = int(target.split(":", 1)[1])
+        dest = await db.get_destination(pool, dest_id, owner)
+        name = (dest["title"] if dest else "") or ""
+        n = await db.pause_sources_for_dest(pool, dest_id, owner, minutes)
+        return "dest", name, n
+    return None, "", 0
+
+
+async def _bulk_pause_feedback(cb, pool, lang, kind, name, n, minutes):
+    """Toast + refresh the right list after a bulk pause."""
+    if kind == "all":
+        key = "paused_all_inf" if minutes is None else "paused_all_timed"
+        await cb.answer(t(lang, key, n=n, mins=minutes), show_alert=False)
+        await _show_sources(cb, pool, lang)
+    else:
+        key = "dest_paused_inf" if minutes is None else "dest_paused_timed"
+        await cb.answer(
+            t(lang, key, n=n, name=name, mins=minutes), show_alert=False)
+        await _show_dests(cb, pool, lang)
+
+
+@router.callback_query(F.data == "pause_all")
+async def cb_pause_all(cb: CallbackQuery, state: FSMContext, pool):
+    await state.clear()
+    lang = await _lang(pool, cb.from_user.id)
+    await _safe_edit(
+        cb, t(lang, "pause_all_menu"), reply_markup=bulk_pause_kb("all", lang))
+    await cb.answer()
+
+
+@router.callback_query(F.data == "resume_all")
+async def cb_resume_all(cb: CallbackQuery, pool):
+    lang = await _lang(pool, cb.from_user.id)
+    n = await db.resume_all_sources(pool, cb.from_user.id)
+    await cb.answer(t(lang, "resumed_all", n=n), show_alert=False)
+    await _show_sources(cb, pool, lang)
+
+
+@router.callback_query(F.data.startswith("destpause:"))
+async def cb_dest_pause(cb: CallbackQuery, state: FSMContext, pool):
+    await state.clear()
+    lang = await _lang(pool, cb.from_user.id)
+    dest_id = int(cb.data.split(":", 1)[1])
+    dest = await db.get_destination(pool, dest_id, cb.from_user.id)
+    if not dest:
+        await cb.answer(t(lang, "cancelled"), show_alert=False)
+        await _show_dests(cb, pool, lang)
+        return
+    await _safe_edit(
+        cb, t(lang, "dest_pause_menu", name=esc(dest["title"] or "")),
+        reply_markup=bulk_pause_kb(f"dest:{dest_id}", lang),
+    )
+    await cb.answer()
+
+
+@router.callback_query(F.data.startswith("destresume:"))
+async def cb_dest_resume(cb: CallbackQuery, pool):
+    lang = await _lang(pool, cb.from_user.id)
+    dest_id = int(cb.data.split(":", 1)[1])
+    dest = await db.get_destination(pool, dest_id, cb.from_user.id)
+    name = esc(dest["title"] or "") if dest else ""
+    n = await db.resume_sources_for_dest(pool, dest_id, cb.from_user.id)
+    await cb.answer(t(lang, "dest_resumed", n=n, name=name), show_alert=False)
+    await _show_dests(cb, pool, lang)
+
+
+@router.callback_query(F.data.startswith("bpause_inf:"))
+async def cb_bpause_inf(cb: CallbackQuery, pool):
+    lang = await _lang(pool, cb.from_user.id)
+    target = cb.data.split(":", 1)[1]
+    kind, name, n = await _apply_bulk_pause(pool, cb.from_user.id, target, None)
+    await _bulk_pause_feedback(cb, pool, lang, kind, esc(name), n, None)
+
+
+@router.callback_query(F.data.startswith("bpause_min:"))
+async def cb_bpause_min(cb: CallbackQuery, pool):
+    lang = await _lang(pool, cb.from_user.id)
+    rest = cb.data.split(":", 1)[1]
+    target, mins_s = rest.rsplit(":", 1)
+    mins = int(mins_s)
+    kind, name, n = await _apply_bulk_pause(pool, cb.from_user.id, target, mins)
+    await _bulk_pause_feedback(cb, pool, lang, kind, esc(name), n, mins)
+
+
+@router.callback_query(F.data.startswith("bpause_custom:"))
+async def cb_bpause_custom(cb: CallbackQuery, state: FSMContext, pool):
+    lang = await _lang(pool, cb.from_user.id)
+    target = cb.data.split(":", 1)[1]
+    await state.set_state(BulkPause.waiting_minutes)
+    await state.update_data(target=target)
+    if target == "all":
+        prompt = t(lang, "pause_all_custom_prompt")
+        back = "pause_all"
+    else:
+        dest_id = int(target.split(":", 1)[1])
+        dest = await db.get_destination(pool, dest_id, cb.from_user.id)
+        prompt = t(lang, "dest_pause_custom_prompt",
+                   name=esc(dest["title"] or "") if dest else "")
+        back = f"destpause:{dest_id}"
+    await _safe_edit(cb, prompt, reply_markup=nav_kb(lang, back_to=back))
+    await cb.answer()
+
+
+@router.message(BulkPause.waiting_minutes)
+async def on_bulk_pause_minutes(message: Message, state: FSMContext, pool):
+    lang = await _lang(pool, message.from_user.id)
+    data = await state.get_data()
+    target = data.get("target")
+    raw = (message.text or "").strip()
+    try:
+        mins = int(raw)
+    except (TypeError, ValueError):
+        mins = 0
+    if target is None:
+        await state.clear()
+        await message.answer(t(lang, "cancelled"), reply_markup=main_menu(lang))
+        return
+    if mins <= 0:
+        await message.answer(t(lang, "src_pause_bad_minutes"))
+        return
+    await state.clear()
+    kind, name, n = await _apply_bulk_pause(
+        pool, message.from_user.id, target, mins)
+    if kind == "all":
+        await message.answer(
+            t(lang, "paused_all_timed", n=n, mins=mins),
+            reply_markup=main_menu(lang),
+        )
+    else:
+        await message.answer(
+            t(lang, "dest_paused_timed", n=n, name=esc(name), mins=mins),
+            reply_markup=main_menu(lang),
+        )
 
 
 @router.callback_query(F.data.startswith("test_dest:"))
@@ -889,12 +1046,9 @@ async def on_ad_filter_input(message: Message, state: FSMContext, pool):
         row = await db.add_ad_filter(pool, message.from_user.id, pat)
         if row is not None:
             added += 1
-    if added:
-        await message.answer(t(lang, "ad_added", count=added))
-    else:
-        await message.answer(t(lang, "ad_added_none"))
+    confirm = t(lang, "ad_added", count=added) if added else t(lang, "ad_added_none")
     text, kb = await _ad_words_view(pool, message.from_user.id, lang)
-    await message.answer(text, reply_markup=kb)
+    await message.answer(confirm + "\n\n" + text, reply_markup=kb)
 
 
 @router.callback_query(F.data.startswith("ad_del:"))
@@ -976,9 +1130,8 @@ async def cb_ad_clean_yes(cb: CallbackQuery, pool, client):
         t(lang, "ad_clean_done", n=total) if total
         else t(lang, "ad_clean_nomatch")
     )
-    await cb.message.answer(done)
     text, kb = await _ad_filter_view(pool, owner, lang)
-    await cb.message.answer(text, reply_markup=kb)
+    await cb.message.answer(done + "\n\n" + text, reply_markup=kb)
 
 
 # ---------------------------------------------------------------------------
@@ -989,21 +1142,10 @@ async def cb_ad_clean_yes(cb: CallbackQuery, pool, client):
 @router.message(Command("status"))
 async def cmd_status(message: Message, pool,
                      userbot_alive: bool = True, userbot_error: str = ""):
-    """Show the current health of the userbot session + dedup stats."""
+    """Show userbot health + dedup stats + pipeline details."""
     lang = await _lang(pool, message.from_user.id)
-    alive, err = userbot_alive, (userbot_error or "")
-    # Dedup stats from the in-memory filter.
-    stats = dedup.stats()
-    err_line = t(lang, "status_err_line", err_detail=err) if err else ""
-    text = t(
-        lang, "status_text",
-        alive_icon="\U0001F7E2" if alive else "\U0001F534",
-        alive_word=t(lang, "on") if alive else t(lang, "off"),
-        err_line=err_line,
-        dedup_checked=stats["checked"],
-        dedup_dropped=stats["dropped"],
-        dedup_tracked=stats["tracked"],
-    )
+    text, alive = await _build_status_text(
+        pool, message.from_user.id, lang, userbot_alive, userbot_error)
     await message.answer(text, reply_markup=main_menu(lang, alive=alive))
 
 
@@ -1012,10 +1154,42 @@ async def cb_status(cb: CallbackQuery, pool,
                     userbot_alive: bool = True, userbot_error: str = ""):
     """Status button in the main menu."""
     lang = await _lang(pool, cb.from_user.id)
+    text, alive = await _build_status_text(
+        pool, cb.from_user.id, lang, userbot_alive, userbot_error)
+    await _safe_edit(cb, text, reply_markup=main_menu(lang, alive=alive))
+    await cb.answer()
+
+
+def _fmt_ago(dt, lang):
+    """Human 'x ago' for an aware datetime (or 'never' when None)."""
+    if dt is None:
+        return t(lang, "time_never")
+    try:
+        now = datetime.now(timezone.utc)
+        if dt.tzinfo is None:
+            dt = dt.replace(tzinfo=timezone.utc)
+        secs = (now - dt).total_seconds()
+    except Exception:
+        return t(lang, "time_never")
+    if secs < 90:
+        return t(lang, "ago_now")
+    mins = int(secs // 60)
+    if mins < 60:
+        return t(lang, "ago_min", n=mins)
+    hours = int(secs // 3600)
+    if hours < 24:
+        return t(lang, "ago_hour", n=hours)
+    return t(lang, "ago_day", n=int(secs // 86400))
+
+
+async def _build_status_text(pool, owner, lang, userbot_alive, userbot_error):
+    """Compose the detailed /status message: userbot health, dedup counters,
+    last RSS poll + backfill, posts forwarded in 24h, per-source last delivery,
+    and any stalled sources."""
     alive, err = userbot_alive, (userbot_error or "")
     stats = dedup.stats()
     err_line = t(lang, "status_err_line", err_detail=err) if err else ""
-    text = t(
+    head = t(
         lang, "status_text",
         alive_icon="\U0001F7E2" if alive else "\U0001F534",
         alive_word=t(lang, "on") if alive else t(lang, "off"),
@@ -1024,7 +1198,87 @@ async def cb_status(cb: CallbackQuery, pool,
         dedup_dropped=stats["dropped"],
         dedup_tracked=stats["tracked"],
     )
-    await _safe_edit(cb, text, reply_markup=main_menu(lang, alive=alive))
+    parts = [head]
+    try:
+        runtime = await db.get_runtime(pool)
+    except Exception:
+        runtime = {}
+    parts.append(t(lang, "status_poll",
+                   when=_fmt_ago(runtime.get("rss_poll"), lang)))
+    parts.append(t(lang, "status_backfill",
+                   when=_fmt_ago(runtime.get("backfill"), lang)))
+    try:
+        posts24 = await db.posts_forwarded_since(pool, owner, 24)
+    except Exception:
+        posts24 = 0
+    parts.append(t(lang, "status_posts24", n=posts24))
+    try:
+        rows = await db.status_overview(pool, owner)
+    except Exception:
+        rows = []
+    if not rows:
+        parts.append("\n" + t(lang, "status_no_sources"))
+        return "\n".join(parts), alive
+    parts.append(t(lang, "status_src_header"))
+    stalled = []
+    for r in rows:
+        label = esc(r["label"] or "")
+        dest = esc(r["dest_title"] or "")
+        if r["is_paused"]:
+            parts.append(t(lang, "status_src_paused", label=label, dest=dest))
+        else:
+            parts.append(t(lang, "status_src_line", label=label, dest=dest,
+                           when=_fmt_ago(r["last_delivered_at"], lang)))
+        if r["stalled"]:
+            stalled.append((label, dest))
+    if stalled:
+        parts.append(t(lang, "status_stalled_header"))
+        for label, dest in stalled:
+            parts.append(
+                t(lang, "status_stalled_line", label=label, dest=dest))
+    return "\n".join(parts), alive
+
+
+_REASON_KEYS = {
+    "forwarded": "reason_forwarded",
+    "paused": "reason_paused",
+    "ad-filter": "reason_adfilter",
+    "dedup": "reason_dedup",
+}
+
+
+async def _build_stats_text(pool, owner, lang):
+    """Compose the /stats message: published count + dropped-by-reason over
+    the last 7 days."""
+    try:
+        published, drops = await db.stats_counts(pool, owner, 7)
+    except Exception:
+        published, drops = 0, []
+    parts = [t(lang, "stats_title"), t(lang, "stats_published", n=published)]
+    parts.append(t(lang, "stats_drops_header"))
+    if not drops:
+        parts.append(t(lang, "stats_no_drops"))
+    else:
+        for reason, n in drops:
+            label = t(lang, _REASON_KEYS.get(reason, "reason_other"))
+            parts.append(t(lang, "stats_drop_line", reason=label, n=n))
+    return "\n".join(parts)
+
+
+@router.message(Command("stats"))
+async def cmd_stats(message: Message, pool):
+    """Published + dropped-by-reason counts for the last 7 days."""
+    lang = await _lang(pool, message.from_user.id)
+    text = await _build_stats_text(pool, message.from_user.id, lang)
+    await message.answer(text, reply_markup=main_menu(lang))
+
+
+@router.callback_query(F.data == "stats")
+async def cb_stats(cb: CallbackQuery, pool):
+    """Stats button in the main menu."""
+    lang = await _lang(pool, cb.from_user.id)
+    text = await _build_stats_text(pool, cb.from_user.id, lang)
+    await _safe_edit(cb, text, reply_markup=main_menu(lang))
     await cb.answer()
 
 

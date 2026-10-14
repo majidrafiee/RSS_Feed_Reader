@@ -94,6 +94,7 @@ async def seed_source(pool, source_id, url):
 async def poll_all_feeds(pool, client):
     """Poll every RSS source and publish new items."""
     sources = await db.all_rss_sources(pool)
+    await db.touch_runtime(pool, "rss_poll")
     for src in sources:
         try:
             feed = await _parse(src["identifier"])
@@ -128,6 +129,7 @@ async def poll_all_feeds(pool, client):
                         src["id"], guid,
                     )
                     trace.post_drop(src.get("label", src["id"]), src["dest_chat_id"], guid, "ad-filter", entry_text)
+                    await db.record_event(pool, src["owner_tg_id"], "drop", "ad-filter", src["dest_chat_id"], src["id"])
                     await db.mark_seen(pool, src["id"], guid)
                     continue
             # Near-duplicate suppression across sources sharing a destination.
@@ -146,11 +148,14 @@ async def poll_all_feeds(pool, client):
                     src["id"], guid,
                 )
                 trace.post_drop(src.get("label", src["id"]), src["dest_chat_id"], guid, "dedup", " ".join(str(entry.get(k, "") or "") for k in ("title", "summary", "description")))
+                await db.record_event(pool, src["owner_tg_id"], "drop", "dedup", src["dest_chat_id"], src["id"])
                 await db.mark_seen(pool, src["id"], guid)
                 continue
             try:
                 await publish_rss(client, src["dest_chat_id"], meta, entry)
                 await db.mark_seen(pool, src["id"], guid)
+                await db.record_event(pool, src["owner_tg_id"], "pub", None, src["dest_chat_id"], src["id"])
+                await db.update_source_last_msg(pool, src["id"], 0, delivered=True)
                 await asyncio.sleep(1)  # be gentle with rate limits
             except Exception as exc:  # noqa: BLE001
                 log.warning("publish rss failed: %s", exc)

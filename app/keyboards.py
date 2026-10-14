@@ -14,7 +14,10 @@ def main_menu(lang: str = "en", alive: bool = True) -> InlineKeyboardMarkup:
     ]
     # Always show Status button; when userbot is dead, also show a red alert.
     rows.append(
-        [InlineKeyboardButton(text=t(lang, "btn_status"), callback_data="status")]
+        [
+            InlineKeyboardButton(text=t(lang, "btn_status"), callback_data="status"),
+            InlineKeyboardButton(text=t(lang, "btn_stats"), callback_data="stats"),
+        ]
     )
     return InlineKeyboardMarkup(inline_keyboard=rows)
 
@@ -77,7 +80,36 @@ def sources_manage_kb(sources, lang: str = "en") -> InlineKeyboardMarkup:
         rows.append([InlineKeyboardButton(
             text=text, callback_data=f"src_edit:{s['id']}",
         )])
+    # Bulk controls: pause / resume every source at once. Kept on this same
+    # list message so the owner never has to scroll to find them.
+    if sources:
+        rows.append([
+            InlineKeyboardButton(
+                text=t(lang, "btn_pause_all"), callback_data="pause_all"),
+            InlineKeyboardButton(
+                text=t(lang, "btn_resume_all"), callback_data="resume_all"),
+        ])
     rows.append([InlineKeyboardButton(text=t(lang, "btn_back"), callback_data="my_setup")])
+    return InlineKeyboardMarkup(inline_keyboard=rows)
+
+
+def bulk_pause_kb(target: str, lang: str = "en") -> InlineKeyboardMarkup:
+    """Duration picker for a BULK pause. `target` is either "all" (every
+    source) or "dest:<id>" (one channel). Buttons stay on the current message.
+    """
+    rows = [[InlineKeyboardButton(
+        text=t(lang, "btn_src_pause_inf"),
+        callback_data=f"bpause_inf:{target}")]]
+    btns = [InlineKeyboardButton(
+        text=t(lang, "btn_src_pause_min", mins=m),
+        callback_data=f"bpause_min:{target}:{m}") for m in PAUSE_MINUTES]
+    rows += [btns[i:i + 2] for i in range(0, len(btns), 2)]
+    rows.append([InlineKeyboardButton(
+        text=t(lang, "btn_src_pause_custom"),
+        callback_data=f"bpause_custom:{target}")])
+    back = "list_src" if target == "all" else "list_dest"
+    rows.append([InlineKeyboardButton(
+        text=t(lang, "btn_back"), callback_data=back)])
     return InlineKeyboardMarkup(inline_keyboard=rows)
 
 
@@ -144,13 +176,17 @@ def source_pause_kb(src_id, lang: str = "en") -> InlineKeyboardMarkup:
 
 
 def dests_manage_kb(dests, lang: str = "en") -> InlineKeyboardMarkup:
-    """One test + delete button per destination."""
+    """One test + pause/resume + delete button per destination."""
     rows = []
     for d in dests:
         title = d["title"] or str(d["chat_id"])
         rows.append([
             InlineKeyboardButton(
                 text=f"\U0001F9EA {title}", callback_data=f"test_dest:{d['id']}"),
+            InlineKeyboardButton(
+                text=t(lang, "btn_dest_pause"), callback_data=f"destpause:{d['id']}"),
+            InlineKeyboardButton(
+                text=t(lang, "btn_dest_resume"), callback_data=f"destresume:{d['id']}"),
             InlineKeyboardButton(
                 text=t(lang, "btn_delete"), callback_data=f"del_dest:{d['id']}"),
         ])

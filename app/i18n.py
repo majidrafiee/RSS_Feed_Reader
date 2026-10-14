@@ -233,6 +233,62 @@ T = {
         "log_send_err": "\u26A0\uFE0F Could not send the log: {err}",
         "log_empty_none": "\u2705 No empty/dropped-post lines found in the log.",
         "log_empty_caption": "\U0001F50D Empty/dropped-post lines ({n} found)",
+        "btn_stats": "\U0001F4C8 Stats (7 days)",
+        "status_poll": "\u2022 Last RSS poll: <b>{when}</b>",
+        "status_backfill": "\u2022 Last backfill sweep: <b>{when}</b>",
+        "status_posts24": "\u2022 Posts forwarded (24h): <b>{n}</b>",
+        "status_src_header": "\n<b>\U0001F4E1 Per-source last delivery</b>",
+        "status_src_line": "\u2022 {label} \u2192 {dest}: {when}",
+        "status_src_paused": "\u2022 {label} \u2192 {dest}: \u23F8\uFE0F paused",
+        "status_stalled_header": "\n\u26A0\uFE0F <b>Stalled sources (no posts in 24h+)</b>",
+        "status_stalled_line": "\u2022 {label} \u2192 {dest}",
+        "status_no_sources": "<i>No sources configured yet.</i>",
+        "time_never": "never",
+        "ago_now": "just now",
+        "ago_min": "{n} min ago",
+        "ago_hour": "{n}h ago",
+        "ago_day": "{n}d ago",
+        "stats_title": "\U0001F4C8 <b>Stats \u2014 last 7 days</b>",
+        "stats_published": "\u2022 Published: <b>{n}</b>",
+        "stats_drops_header": "\n<b>Dropped posts by reason</b>",
+        "stats_drop_line": "\u2022 {reason}: <b>{n}</b>",
+        "stats_no_drops": "<i>No posts were dropped this week.</i>",
+        "reason_forwarded": "Forwarded ads skipped",
+        "reason_paused": "Skipped while paused",
+        "reason_adfilter": "Blocked by ad filter",
+        "reason_dedup": "Duplicates blocked",
+        "reason_other": "Other",
+        "src_auto_resumed": (
+            "\u25B6\uFE0F <b>{name}</b> \u2192 <b>{dest}</b> auto-resumed \u2014 "
+            "its timed pause has ended, so delivery is active again."
+        ),
+        "btn_pause_all": "\u23F8\uFE0F Pause ALL sources",
+        "btn_resume_all": "\u25B6\uFE0F Resume ALL sources",
+        "btn_dest_pause": "\u23F8\uFE0F Pause",
+        "btn_dest_resume": "\u25B6\uFE0F Resume",
+        "pause_all_menu": (
+            "\u23F8\uFE0F <b>Pause all sources</b>\n\n"
+            "Choose how long to pause <b>every</b> source. While paused, new "
+            "posts are skipped and will not be sent later."
+        ),
+        "pause_all_custom_prompt": (
+            "\u270F\uFE0F Send the number of minutes to pause <b>all</b> "
+            "sources.\n\n<i>Enter a whole number greater than 0.</i>"
+        ),
+        "paused_all_inf": "\u23F8\uFE0F Paused <b>{n}</b> source(s) until you resume them.",
+        "paused_all_timed": "\u23F8\uFE0F Paused <b>{n}</b> source(s) for {mins} minute(s).",
+        "resumed_all": "\u25B6\uFE0F Resumed <b>{n}</b> source(s).",
+        "dest_pause_menu": (
+            "\u23F8\uFE0F <b>Pause channel: {name}</b>\n\n"
+            "Choose how long to pause every source feeding this channel."
+        ),
+        "dest_pause_custom_prompt": (
+            "\u270F\uFE0F Send the number of minutes to pause <b>{name}</b>.\n\n"
+            "<i>Enter a whole number greater than 0.</i>"
+        ),
+        "dest_paused_inf": "\u23F8\uFE0F Paused <b>{n}</b> source(s) for <b>{name}</b> until you resume.",
+        "dest_paused_timed": "\u23F8\uFE0F Paused <b>{n}</b> source(s) for <b>{name}</b> for {mins} minute(s).",
+        "dest_resumed": "\u25B6\uFE0F Resumed <b>{n}</b> source(s) for <b>{name}</b>.",
     },
     "fa": {
         "welcome": (
@@ -416,6 +472,62 @@ T = {
         "log_send_err": "\u26A0\uFE0F \u0627\u0631\u0633\u0627\u0644 \u0644\u0627\u06af \u0645\u0645\u06a9\u0646 \u0646\u0634\u062f: {err}",
         "log_empty_none": "\u2705 \u0647\u06cc\u0686 \u062e\u0637 \u0645\u0631\u0628\u0648\u0637 \u0628\u0647 \u067e\u0633\u062a \u062e\u0627\u0644\u06cc/\u062d\u0630\u0641\u200c\u0634\u062f\u0647 \u062f\u0631 \u0644\u0627\u06af \u067e\u06cc\u062f\u0627 \u0646\u0634\u062f.",
         "log_empty_caption": "\U0001F50D \u062e\u0637\u0648\u0637 \u067e\u0633\u062a \u062e\u0627\u0644\u06cc/\u062d\u0630\u0641\u200c\u0634\u062f\u0647 ({n} \u0645\u0648\u0631\u062f)",
+        "btn_stats": "\U0001F4C8 \u0622\u0645\u0627\u0631 (\u06f7 \u0631\u0648\u0632)",
+        "status_poll": "\u2022 \u0622\u062e\u0631\u06cc\u0646 \u0628\u0631\u0631\u0633\u06cc RSS: <b>{when}</b>",
+        "status_backfill": "\u2022 \u0622\u062e\u0631\u06cc\u0646 \u062c\u0628\u0631\u0627\u0646 \u0639\u0642\u0628\u200c\u0645\u0627\u0646\u062f\u06af\u06cc: <b>{when}</b>",
+        "status_posts24": "\u2022 \u067e\u0633\u062a\u200c\u0647\u0627\u06cc \u0627\u0631\u0633\u0627\u0644\u200c\u0634\u062f\u0647 (\u06f2\u06f4 \u0633\u0627\u0639\u062a): <b>{n}</b>",
+        "status_src_header": "\n<b>\U0001F4E1 \u0622\u062e\u0631\u06cc\u0646 \u062a\u062d\u0648\u06cc\u0644 \u0647\u0631 \u0645\u0646\u0628\u0639</b>",
+        "status_src_line": "\u2022 {label} \u2192 {dest}: {when}",
+        "status_src_paused": "\u2022 {label} \u2192 {dest}: \u23F8\uFE0F \u0645\u062a\u0648\u0642\u0641",
+        "status_stalled_header": "\n\u26A0\uFE0F <b>\u0645\u0646\u0627\u0628\u0639 \u0631\u0627\u06a9\u062f (\u0628\u062f\u0648\u0646 \u067e\u0633\u062a \u062f\u0631 \u06f2\u06f4 \u0633\u0627\u0639\u062a+)</b>",
+        "status_stalled_line": "\u2022 {label} \u2192 {dest}",
+        "status_no_sources": "<i>\u0647\u0646\u0648\u0632 \u0645\u0646\u0628\u0639\u06cc \u062a\u0646\u0638\u06cc\u0645 \u0646\u0634\u062f\u0647.</i>",
+        "time_never": "\u0647\u0631\u06af\u0632",
+        "ago_now": "\u0647\u0645\u200c\u0627\u06a9\u0646\u0648\u0646",
+        "ago_min": "{n} \u062f\u0642\u06cc\u0642\u0647 \u067e\u06cc\u0634",
+        "ago_hour": "{n} \u0633\u0627\u0639\u062a \u067e\u06cc\u0634",
+        "ago_day": "{n} \u0631\u0648\u0632 \u067e\u06cc\u0634",
+        "stats_title": "\U0001F4C8 <b>\u0622\u0645\u0627\u0631 \u2014 \u06f7 \u0631\u0648\u0632 \u0627\u062e\u06cc\u0631</b>",
+        "stats_published": "\u2022 \u0645\u0646\u062a\u0634\u0631\u0634\u062f\u0647: <b>{n}</b>",
+        "stats_drops_header": "\n<b>\u067e\u0633\u062a\u200c\u0647\u0627\u06cc \u062d\u0630\u0641\u200c\u0634\u062f\u0647 \u0628\u0631 \u0627\u0633\u0627\u0633 \u062f\u0644\u06cc\u0644</b>",
+        "stats_drop_line": "\u2022 {reason}: <b>{n}</b>",
+        "stats_no_drops": "<i>\u0627\u06cc\u0646 \u0647\u0641\u062a\u0647 \u067e\u0633\u062a\u06cc \u062d\u0630\u0641 \u0646\u0634\u062f.</i>",
+        "reason_forwarded": "\u062a\u0628\u0644\u06cc\u063a\u0627\u062a \u0641\u0648\u0631\u0648\u0627\u0631\u062f\u06cc \u0631\u062f\u200c\u0634\u062f\u0647",
+        "reason_paused": "\u0631\u062f\u200c\u0634\u062f\u0647 \u062f\u0631 \u062d\u0627\u0644\u062a \u062a\u0648\u0642\u0641",
+        "reason_adfilter": "\u0645\u0633\u062f\u0648\u062f \u062a\u0648\u0633\u0637 \u0641\u06cc\u0644\u062a\u0631 \u062a\u0628\u0644\u06cc\u063a",
+        "reason_dedup": "\u062a\u06a9\u0631\u0627\u0631\u06cc\u200c\u0647\u0627\u06cc \u0645\u0633\u062f\u0648\u062f",
+        "reason_other": "\u0633\u0627\u06cc\u0631",
+        "src_auto_resumed": (
+            "\u25B6\uFE0F <b>{name}</b> \u2192 <b>{dest}</b> \u062e\u0648\u062f\u06a9\u0627\u0631 \u0641\u0639\u0627\u0644 \u0634\u062f \u2014 "
+            "\u062a\u0648\u0642\u0641 \u0632\u0645\u0627\u0646\u200c\u062f\u0627\u0631 \u0622\u0646 \u062a\u0645\u0627\u0645 \u0634\u062f \u0648 \u062a\u062d\u0648\u06cc\u0644 \u062f\u0648\u0628\u0627\u0631\u0647 \u0641\u0639\u0627\u0644 \u0627\u0633\u062a."
+        ),
+        "btn_pause_all": "\u23F8\uFE0F \u062a\u0648\u0642\u0641 \u0647\u0645\u0647 \u0645\u0646\u0627\u0628\u0639",
+        "btn_resume_all": "\u25B6\uFE0F \u0641\u0639\u0627\u0644\u200c\u0633\u0627\u0632\u06cc \u0647\u0645\u0647 \u0645\u0646\u0627\u0628\u0639",
+        "btn_dest_pause": "\u23F8\uFE0F \u062a\u0648\u0642\u0641",
+        "btn_dest_resume": "\u25B6\uFE0F \u0641\u0639\u0627\u0644",
+        "pause_all_menu": (
+            "\u23F8\uFE0F <b>\u062a\u0648\u0642\u0641 \u0647\u0645\u0647 \u0645\u0646\u0627\u0628\u0639</b>\n\n"
+            "\u0645\u062f\u062a \u062a\u0648\u0642\u0641 <b>\u0647\u0645\u0647</b> \u0645\u0646\u0627\u0628\u0639 \u0631\u0627 \u0627\u0646\u062a\u062e\u0627\u0628 \u06a9\u0646. \u062f\u0631 \u0632\u0645\u0627\u0646 \u062a\u0648\u0642\u0641\u060c "
+            "\u067e\u0633\u062a\u200c\u0647\u0627\u06cc \u062c\u062f\u06cc\u062f \u0631\u062f \u0645\u06cc\u200c\u0634\u0648\u0646\u062f \u0648 \u0628\u0639\u062f\u0627\u064b \u0627\u0631\u0633\u0627\u0644 \u0646\u0645\u06cc\u200c\u0634\u0648\u0646\u062f."
+        ),
+        "pause_all_custom_prompt": (
+            "\u270F\uFE0F \u062a\u0639\u062f\u0627\u062f \u062f\u0642\u06cc\u0642\u0647 \u062a\u0648\u0642\u0641 <b>\u0647\u0645\u0647</b> \u0645\u0646\u0627\u0628\u0639 \u0631\u0627 \u0628\u0641\u0631\u0633\u062a.\n\n"
+            "<i>\u06cc\u06a9 \u0639\u062f\u062f \u0635\u062d\u06cc\u062d \u0628\u0632\u0631\u06af\u200c\u062a\u0631 \u0627\u0632 \u06f0 \u0648\u0627\u0631\u062f \u06a9\u0646.</i>"
+        ),
+        "paused_all_inf": "\u23F8\uFE0F <b>{n}</b> \u0645\u0646\u0628\u0639 \u062a\u0627 \u0632\u0645\u0627\u0646 \u0641\u0639\u0627\u0644\u200c\u0633\u0627\u0632\u06cc \u0645\u062a\u0648\u0642\u0641 \u0634\u062f.",
+        "paused_all_timed": "\u23F8\uFE0F <b>{n}</b> \u0645\u0646\u0628\u0639 \u0628\u0631\u0627\u06cc {mins} \u062f\u0642\u06cc\u0642\u0647 \u0645\u062a\u0648\u0642\u0641 \u0634\u062f.",
+        "resumed_all": "\u25B6\uFE0F <b>{n}</b> \u0645\u0646\u0628\u0639 \u0641\u0639\u0627\u0644 \u0634\u062f.",
+        "dest_pause_menu": (
+            "\u23F8\uFE0F <b>\u062a\u0648\u0642\u0641 \u06a9\u0627\u0646\u0627\u0644: {name}</b>\n\n"
+            "\u0645\u062f\u062a \u062a\u0648\u0642\u0641 \u0647\u0645\u0647 \u0645\u0646\u0627\u0628\u0639 \u0627\u06cc\u0646 \u06a9\u0627\u0646\u0627\u0644 \u0631\u0627 \u0627\u0646\u062a\u062e\u0627\u0628 \u06a9\u0646."
+        ),
+        "dest_pause_custom_prompt": (
+            "\u270F\uFE0F \u062a\u0639\u062f\u0627\u062f \u062f\u0642\u06cc\u0642\u0647 \u062a\u0648\u0642\u0641 <b>{name}</b> \u0631\u0627 \u0628\u0641\u0631\u0633\u062a.\n\n"
+            "<i>\u06cc\u06a9 \u0639\u062f\u062f \u0635\u062d\u06cc\u062d \u0628\u0632\u0631\u06af\u200c\u062a\u0631 \u0627\u0632 \u06f0 \u0648\u0627\u0631\u062f \u06a9\u0646.</i>"
+        ),
+        "dest_paused_inf": "\u23F8\uFE0F <b>{n}</b> \u0645\u0646\u0628\u0639 \u0628\u0631\u0627\u06cc <b>{name}</b> \u062a\u0627 \u0641\u0639\u0627\u0644\u200c\u0633\u0627\u0632\u06cc \u0645\u062a\u0648\u0642\u0641 \u0634\u062f.",
+        "dest_paused_timed": "\u23F8\uFE0F <b>{n}</b> \u0645\u0646\u0628\u0639 \u0628\u0631\u0627\u06cc <b>{name}</b> \u0628\u0647 \u0645\u062f\u062a {mins} \u062f\u0642\u06cc\u0642\u0647 \u0645\u062a\u0648\u0642\u0641 \u0634\u062f.",
+        "dest_resumed": "\u25B6\uFE0F <b>{n}</b> \u0645\u0646\u0628\u0639 \u0628\u0631\u0627\u06cc <b>{name}</b> \u0641\u0639\u0627\u0644 \u0634\u062f.",
     },
 }
 

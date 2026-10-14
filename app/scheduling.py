@@ -63,6 +63,26 @@ def start_refresh(coro, args, minutes: int) -> None:
     log.info("Destination refresh started, interval %s min", minutes)
 
 
+def start_resume_watch(coro, args, minutes: int = 1) -> None:
+    """Schedule the resume-watch job: it sends an auto-resume notice when a
+    timed pause lapses, and prunes the old event log. Needs the aiogram Bot in
+    `args` so it can message the owner."""
+    global _started
+    scheduler.add_job(
+        coro,
+        "interval",
+        minutes=minutes,
+        args=args,
+        id="resume_watch",
+        max_instances=1,
+        coalesce=True,
+    )
+    if not _started:
+        scheduler.start()
+        _started = True
+    log.info("Resume-watch started, interval %s min", minutes)
+
+
 def reschedule(minutes: int) -> None:
     try:
         scheduler.reschedule_job("rss", trigger="interval", minutes=minutes)

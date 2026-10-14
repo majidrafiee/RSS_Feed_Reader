@@ -102,6 +102,35 @@ ALTER TABLE user_settings ADD COLUMN IF NOT EXISTS dedup_enabled BOOLEAN NOT NUL
 ALTER TABLE user_settings ADD COLUMN IF NOT EXISTS dedup_window_min INT NOT NULL DEFAULT 30;
 ALTER TABLE user_settings ADD COLUMN IF NOT EXISTS dedup_threshold INT NOT NULL DEFAULT 90;
 ALTER TABLE user_settings ADD COLUMN IF NOT EXISTS dedup_min_len INT NOT NULL DEFAULT 20;
+
+-- Per-source delivery timestamp. Updated ONLY on a real publish (never on a
+-- skip), so /status can show each source's last-delivered time and flag a
+-- source that is active+unpaused yet silently stalled.
+ALTER TABLE sources ADD COLUMN IF NOT EXISTS last_delivered_at TIMESTAMPTZ;
+-- When a TIMED pause is set we owe the owner one "resumed" notice once
+-- paused_until passes; the resume-watch job sends it and clears this flag.
+ALTER TABLE sources ADD COLUMN IF NOT EXISTS resume_notice_pending BOOLEAN NOT NULL DEFAULT FALSE;
+
+-- Lightweight runtime heartbeats (last RSS poll / last backfill sweep), read
+-- by /status so a stalled pipeline is visible.
+CREATE TABLE IF NOT EXISTS runtime_kv (
+    k   TEXT PRIMARY KEY,
+    ts  TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+-- Pipeline event log for /stats: one row per published or dropped post, with
+-- the drop reason. Pruned to the last 30 days by the resume-watch job.
+CREATE TABLE IF NOT EXISTS events (
+    id           BIGSERIAL PRIMARY KEY,
+    owner_tg_id  BIGINT NOT NULL,
+    dest_chat_id BIGINT,
+    source_id    BIGINT,
+    kind         TEXT NOT NULL,   -- 'pub' | 'drop'
+    reason       TEXT,            -- drop reason: forwarded|paused|ad-filter|dedup
+    created_at   TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS idx_events_owner_time
+    ON events (owner_tg_id, created_at);
 """
 
 
@@ -559,16 +588,29 @@ async def all_tg_sources(pool):
         )
 
 
-async def update_source_last_msg(pool, source_id, msg_id):
-    """Advance the delivered-watermark for a source. Never moves backwards."""
+async def update_source_last_msg(pool, source_id, msg_id, delivered=False):
+    """Advance the delivered-watermark for a source. Never moves backwards.
+
+    When `delivered` is True this was a REAL publish (not a skip), so we also
+    stamp last_delivered_at — used by /status for last-delivered + stall
+    detection.
+    """
     if msg_id is None:
         return
     async with pool.acquire() as con:
-        await con.execute(
-            "UPDATE sources SET last_tg_msg_id = GREATEST("
-            "COALESCE(last_tg_msg_id, 0), $2) WHERE id = $1",
-            source_id, msg_id,
-        )
+        if delivered:
+            await con.execute(
+                "UPDATE sources SET last_tg_msg_id = GREATEST("
+                "COALESCE(last_tg_msg_id, 0), $2), last_delivered_at = now() "
+                "WHERE id = $1",
+                source_id, msg_id,
+            )
+        else:
+            await con.execute(
+                "UPDATE sources SET last_tg_msg_id = GREATEST("
+                "COALESCE(last_tg_msg_id, 0), $2) WHERE id = $1",
+                source_id, msg_id,
+            )
 
 
 async def all_rss_sources(pool):
@@ -651,3 +693,229 @@ async def release_tg_message(pool, source_id, msg_id) -> None:
             "DELETE FROM seen_items WHERE source_id = $1 AND guid = $2",
             source_id, _tg_guid(msg_id),
         )
+
+
+# ---------- pipeline event log (for /stats) ----------
+async def record_event(pool, owner_tg_id, kind, reason=None,
+                       dest_chat_id=None, source_id=None):
+    """Log one pipeline event. kind='pub' for a published post, kind='drop'
+    with a reason (forwarded|paused|ad-filter|dedup) for a skipped one.
+    Best-effort: a logging failure must never break delivery, so swallow
+    errors here."""
+    if owner_tg_id is None:
+        return
+    try:
+        async with pool.acquire() as con:
+            await con.execute(
+                "INSERT INTO events (owner_tg_id, dest_chat_id, source_id, "
+                "kind, reason) VALUES ($1, $2, $3, $4, $5)",
+                owner_tg_id, dest_chat_id, source_id, kind, reason,
+            )
+    except Exception:
+        pass
+
+
+async def stats_counts(pool, owner_tg_id, days=7):
+    """Return (published_count, [(reason, count), ...]) over the last `days`
+    for this owner. Drop reasons are ordered most-frequent first."""
+    async with pool.acquire() as con:
+        pub = await con.fetchval(
+            "SELECT COUNT(*) FROM events "
+            "WHERE owner_tg_id = $1 AND kind = 'pub' "
+            "      AND created_at >= now() - make_interval(days => $2)",
+            owner_tg_id, int(days),
+        )
+        rows = await con.fetch(
+            "SELECT reason, COUNT(*) AS n FROM events "
+            "WHERE owner_tg_id = $1 AND kind = 'drop' "
+            "      AND created_at >= now() - make_interval(days => $2) "
+            "GROUP BY reason ORDER BY n DESC",
+            owner_tg_id, int(days),
+        )
+    return int(pub or 0), [(r["reason"] or "other", int(r["n"])) for r in rows]
+
+
+async def prune_events(pool, days=30):
+    """Delete event rows older than `days` so the table stays small."""
+    async with pool.acquire() as con:
+        await con.execute(
+            "DELETE FROM events WHERE created_at < now() - "
+            "make_interval(days => $1)",
+            int(days),
+        )
+
+
+# ---------- runtime heartbeats (for /status) ----------
+async def touch_runtime(pool, key):
+    """Record that `key` (e.g. 'rss_poll', 'backfill') just ran."""
+    try:
+        async with pool.acquire() as con:
+            await con.execute(
+                "INSERT INTO runtime_kv (k, ts) VALUES ($1, now()) "
+                "ON CONFLICT (k) DO UPDATE SET ts = now()",
+                key,
+            )
+    except Exception:
+        pass
+
+
+async def get_runtime(pool):
+    """All runtime heartbeats as a {key: timestamp} dict."""
+    async with pool.acquire() as con:
+        rows = await con.fetch("SELECT k, ts FROM runtime_kv")
+    return {r["k"]: r["ts"] for r in rows}
+
+
+# ---------- bulk pause / resume ----------
+async def pause_all_sources(pool, owner, minutes=None):
+    """Pause EVERY source the owner has. minutes=None pauses indefinitely,
+    otherwise a timed pause. Returns the number of sources affected."""
+    async with pool.acquire() as con:
+        if minutes is None:
+            rows = await con.fetch(
+                "UPDATE sources s SET paused = TRUE, paused_until = NULL, "
+                "       resume_notice_pending = FALSE "
+                "FROM destinations d "
+                "WHERE s.destination_id = d.id AND d.owner_tg_id = $1 "
+                "RETURNING s.id",
+                owner,
+            )
+        else:
+            rows = await con.fetch(
+                "UPDATE sources s SET paused = FALSE, "
+                "       paused_until = now() + make_interval(mins => $2), "
+                "       resume_notice_pending = TRUE "
+                "FROM destinations d "
+                "WHERE s.destination_id = d.id AND d.owner_tg_id = $1 "
+                "RETURNING s.id",
+                owner, int(minutes),
+            )
+        return len(rows)
+
+
+async def resume_all_sources(pool, owner):
+    """Clear every pause for the owner. Returns the number of sources that were
+    actually paused and are now resumed."""
+    async with pool.acquire() as con:
+        rows = await con.fetch(
+            "UPDATE sources s SET paused = FALSE, paused_until = NULL, "
+            "       resume_notice_pending = FALSE "
+            "FROM destinations d "
+            "WHERE s.destination_id = d.id AND d.owner_tg_id = $1 "
+            "      AND (s.paused OR s.paused_until IS NOT NULL) "
+            "RETURNING s.id",
+            owner,
+        )
+        return len(rows)
+
+
+async def pause_sources_for_dest(pool, dest_id, owner, minutes=None):
+    """Pause every source feeding ONE destination (owner-checked). Returns the
+    number of sources affected (0 if the destination isn't the owner's)."""
+    async with pool.acquire() as con:
+        if minutes is None:
+            rows = await con.fetch(
+                "UPDATE sources s SET paused = TRUE, paused_until = NULL, "
+                "       resume_notice_pending = FALSE "
+                "FROM destinations d "
+                "WHERE s.destination_id = d.id AND d.id = $1 "
+                "      AND d.owner_tg_id = $2 "
+                "RETURNING s.id",
+                dest_id, owner,
+            )
+        else:
+            rows = await con.fetch(
+                "UPDATE sources s SET paused = FALSE, "
+                "       paused_until = now() + make_interval(mins => $3), "
+                "       resume_notice_pending = TRUE "
+                "FROM destinations d "
+                "WHERE s.destination_id = d.id AND d.id = $1 "
+                "      AND d.owner_tg_id = $2 "
+                "RETURNING s.id",
+                dest_id, owner, int(minutes),
+            )
+        return len(rows)
+
+
+async def resume_sources_for_dest(pool, dest_id, owner):
+    """Clear pauses for every source of one destination. Returns the count."""
+    async with pool.acquire() as con:
+        rows = await con.fetch(
+            "UPDATE sources s SET paused = FALSE, paused_until = NULL, "
+            "       resume_notice_pending = FALSE "
+            "FROM destinations d "
+            "WHERE s.destination_id = d.id AND d.id = $1 "
+            "      AND d.owner_tg_id = $2 "
+            "      AND (s.paused OR s.paused_until IS NOT NULL) "
+            "RETURNING s.id",
+            dest_id, owner,
+        )
+        return len(rows)
+
+
+# ---------- auto-resume notices ----------
+async def due_resume_notices(pool):
+    """Sources whose TIMED pause just lapsed and that still owe a 'resumed'
+    notice. Returns rows with the source label, owner and destination title.
+    The caller sends the notice then calls clear_resume_notice."""
+    async with pool.acquire() as con:
+        return await con.fetch(
+            "SELECT s.id AS source_id, "
+            "       COALESCE(s.custom_label, s.label) AS source_label, "
+            "       d.owner_tg_id AS owner_tg_id, "
+            "       d.title AS dest_title, "
+            "       COALESCE(us.language, 'en') AS owner_lang "
+            "FROM sources s JOIN destinations d ON d.id = s.destination_id "
+            "LEFT JOIN user_settings us ON us.tg_user_id = d.owner_tg_id "
+            "WHERE s.resume_notice_pending = TRUE "
+            "      AND s.paused = FALSE "
+            "      AND (s.paused_until IS NULL OR s.paused_until <= now())",
+        )
+
+
+async def clear_resume_notice(pool, source_id):
+    """Mark the resume notice as sent (and tidy the lapsed paused_until)."""
+    async with pool.acquire() as con:
+        await con.execute(
+            "UPDATE sources SET resume_notice_pending = FALSE, "
+            "       paused_until = NULL "
+            "WHERE id = $1",
+            source_id,
+        )
+
+
+# ---------- status overview ----------
+async def status_overview(pool, owner):
+    """Per-source rows for /status: destination, effective label, pause state,
+    last-delivered time, and a `stalled` flag (active + not paused but nothing
+    delivered in over 24h)."""
+    async with pool.acquire() as con:
+        return await con.fetch(
+            "SELECT s.id AS source_id, s.kind, "
+            "       COALESCE(s.custom_label, s.label) AS label, "
+            "       d.title AS dest_title, "
+            "       (s.paused OR (s.paused_until IS NOT NULL "
+            "            AND s.paused_until > now())) AS is_paused, "
+            "       s.last_delivered_at AS last_delivered_at, "
+            "       (NOT (s.paused OR (s.paused_until IS NOT NULL "
+            "            AND s.paused_until > now())) "
+            "        AND (s.last_delivered_at IS NULL "
+            "             OR s.last_delivered_at < now() - interval '24 hours')) "
+            "            AS stalled "
+            "FROM sources s JOIN destinations d ON d.id = s.destination_id "
+            "WHERE d.owner_tg_id = $1 "
+            "ORDER BY d.id, s.id",
+            owner,
+        )
+
+
+async def posts_forwarded_since(pool, owner, hours=24):
+    """Count published posts for this owner over the last `hours` (for
+    /status)."""
+    async with pool.acquire() as con:
+        return int(await con.fetchval(
+            "SELECT COUNT(*) FROM events WHERE owner_tg_id = $1 "
+            "      AND kind = 'pub' "
+            "      AND created_at >= now() - make_interval(hours => $2)",
+            owner, int(hours),
+        ) or 0)

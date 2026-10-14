@@ -50,6 +50,9 @@ async def backfill_tg_sources(pool, client):
             if "used under two different IP" in str(exc):
                 trace.session_bad(chat_id, exc)
 
+    # Heartbeat so /status can show the pipeline is alive.
+    await db.touch_runtime(pool, "backfill")
+
 
 async def _backfill_one(pool, client, chat_id, dest_rows):
     # The watermark is per source ROW, but all rows for the same chat share the
@@ -164,6 +167,10 @@ async def _backfill_one(pool, client, chat_id, dest_rows):
                 continue
             if is_forwarded and r["skip_forwarded"]:
                 trace.post_drop(chat_id, r["dest_chat_id"], rep_id, "forwarded")
+                await db.record_event(
+                    pool, r["owner_tg_id"], "drop", "forwarded",
+                    r["dest_chat_id"], r["source_id"],
+                )
                 await db.update_source_last_msg(pool, r["source_id"], max_id)
                 continue
             # Per-source pause: skip the recovered post/album AND advance the
@@ -174,6 +181,10 @@ async def _backfill_one(pool, client, chat_id, dest_rows):
                     chat_id, rep_id, max_id, r["dest_chat_id"],
                 )
                 trace.post_drop(chat_id, r["dest_chat_id"], rep_id, "paused")
+                await db.record_event(
+                    pool, r["owner_tg_id"], "drop", "paused",
+                    r["dest_chat_id"], r["source_id"],
+                )
                 await db.update_source_last_msg(pool, r["source_id"], max_id)
                 continue
             # Runtime ad filter: skip a recovered post/album whose text matches
@@ -187,6 +198,10 @@ async def _backfill_one(pool, client, chat_id, dest_rows):
                         chat_id, rep_id, max_id, r["dest_chat_id"],
                     )
                     trace.post_drop(chat_id, r["dest_chat_id"], rep_id, "ad-filter", item_text)
+                    await db.record_event(
+                        pool, r["owner_tg_id"], "drop", "ad-filter",
+                        r["dest_chat_id"], r["source_id"],
+                    )
                     await db.update_source_last_msg(
                         pool, r["source_id"], max_id
                     )
@@ -206,6 +221,10 @@ async def _backfill_one(pool, client, chat_id, dest_rows):
                     chat_id, rep_id, max_id, r["dest_chat_id"],
                 )
                 trace.post_drop(chat_id, r["dest_chat_id"], rep_id, "dedup", " ".join(m.message or "" for m in item))
+                await db.record_event(
+                    pool, r["owner_tg_id"], "drop", "dedup",
+                    r["dest_chat_id"], r["source_id"],
+                )
                 await db.update_source_last_msg(
                     pool, r["source_id"], max_id
                 )
@@ -226,7 +245,11 @@ async def _backfill_one(pool, client, chat_id, dest_rows):
                     await publish_tg_album(client, r["dest_chat_id"], meta, item)
                 else:
                     await publish_tg(client, r["dest_chat_id"], meta, head)
-                await db.update_source_last_msg(pool, r["source_id"], max_id)
+                await db.update_source_last_msg(pool, r["source_id"], max_id, delivered=True)
+                await db.record_event(
+                    pool, r["owner_tg_id"], "pub", None,
+                    r["dest_chat_id"], r["source_id"],
+                )
                 log.info(
                     "backfill: delivered src=%s ids=%s-%s (album=%s) -> dest=%s",
                     chat_id, rep_id, max_id, is_album, r["dest_chat_id"],

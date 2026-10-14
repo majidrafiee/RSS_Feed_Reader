@@ -105,6 +105,10 @@ def register_userbot(client, pool):
                         chat_id, row["dest_chat_id"],
                     )
                     trace.post_drop(chat_id, row["dest_chat_id"], msg_id, "forwarded", event.message.message or "")
+                    await db.record_event(
+                        pool, row["owner_tg_id"], "drop", "forwarded",
+                        row["dest_chat_id"], row["source_id"],
+                    )
                     await db.update_source_last_msg(pool, row["source_id"], msg_id)
                     continue
                 # Per-source pause: while paused, skip the post AND advance the
@@ -115,6 +119,10 @@ def register_userbot(client, pool):
                         msg_id, chat_id, row["dest_chat_id"],
                     )
                     trace.post_drop(chat_id, row["dest_chat_id"], msg_id, "paused", event.message.message or "")
+                    await db.record_event(
+                        pool, row["owner_tg_id"], "drop", "paused",
+                        row["dest_chat_id"], row["source_id"],
+                    )
                     await db.update_source_last_msg(pool, row["source_id"], msg_id)
                     continue
                 # Runtime ad filter: skip a new post whose text matches one of
@@ -129,6 +137,10 @@ def register_userbot(client, pool):
                             msg_id, chat_id, row["dest_chat_id"],
                         )
                         trace.post_drop(chat_id, row["dest_chat_id"], msg_id, "ad-filter", event.message.message or "")
+                        await db.record_event(
+                            pool, row["owner_tg_id"], "drop", "ad-filter",
+                            row["dest_chat_id"], row["source_id"],
+                        )
                         await db.update_source_last_msg(
                             pool, row["source_id"], msg_id
                         )
@@ -147,6 +159,10 @@ def register_userbot(client, pool):
                         msg_id, chat_id, row["dest_chat_id"],
                     )
                     trace.post_drop(chat_id, row["dest_chat_id"], msg_id, "dedup", event.message.message or "")
+                    await db.record_event(
+                        pool, row["owner_tg_id"], "drop", "dedup",
+                        row["dest_chat_id"], row["source_id"],
+                    )
                     await db.update_source_last_msg(
                         pool, row["source_id"], msg_id
                     )
@@ -166,7 +182,12 @@ def register_userbot(client, pool):
                     await publish_tg(client, row["dest_chat_id"], meta, event.message)
                     # Advance the delivered watermark so the backfill job knows
                     # this message id is already handled for this source.
-                    await db.update_source_last_msg(pool, row["source_id"], msg_id)
+                    await db.update_source_last_msg(
+                        pool, row["source_id"], msg_id, delivered=True)
+                    await db.record_event(
+                        pool, row["owner_tg_id"], "pub", None,
+                        row["dest_chat_id"], row["source_id"],
+                    )
                 except Exception as exc:  # noqa: BLE001
                     # Publish failed: release the claim so the backfill sweep
                     # can retry it (don't silently drop the post).
@@ -233,6 +254,10 @@ def register_userbot(client, pool):
                         chat_id, row["dest_chat_id"],
                     )
                     trace.post_drop(chat_id, row["dest_chat_id"], rep_id, "forwarded")
+                    await db.record_event(
+                        pool, row["owner_tg_id"], "drop", "forwarded",
+                        row["dest_chat_id"], row["source_id"],
+                    )
                     await db.update_source_last_msg(pool, row["source_id"], max_id)
                     continue
                 # Per-source pause: skip the whole album AND advance the
@@ -243,6 +268,10 @@ def register_userbot(client, pool):
                         rep_id, max_id, chat_id, row["dest_chat_id"],
                     )
                     trace.post_drop(chat_id, row["dest_chat_id"], rep_id, "paused")
+                    await db.record_event(
+                        pool, row["owner_tg_id"], "drop", "paused",
+                        row["dest_chat_id"], row["source_id"],
+                    )
                     await db.update_source_last_msg(pool, row["source_id"], max_id)
                     continue
                 # Runtime ad filter: skip the whole album when its caption
@@ -258,6 +287,10 @@ def register_userbot(client, pool):
                             rep_id, max_id, chat_id, row["dest_chat_id"],
                         )
                         trace.post_drop(chat_id, row["dest_chat_id"], rep_id, "ad-filter", album_text)
+                        await db.record_event(
+                            pool, row["owner_tg_id"], "drop", "ad-filter",
+                            row["dest_chat_id"], row["source_id"],
+                        )
                         await db.update_source_last_msg(
                             pool, row["source_id"], max_id
                         )
@@ -275,6 +308,10 @@ def register_userbot(client, pool):
                         rep_id, max_id, chat_id, row["dest_chat_id"],
                     )
                     trace.post_drop(chat_id, row["dest_chat_id"], rep_id, "dedup", " ".join(m.message or "" for m in msgs))
+                    await db.record_event(
+                        pool, row["owner_tg_id"], "drop", "dedup",
+                        row["dest_chat_id"], row["source_id"],
+                    )
                     await db.update_source_last_msg(
                         pool, row["source_id"], max_id
                     )
@@ -297,7 +334,11 @@ def register_userbot(client, pool):
                     # Advance the watermark past the WHOLE album (max id) so
                     # none of its members re-fire through backfill.
                     await db.update_source_last_msg(
-                        pool, row["source_id"], max_id
+                        pool, row["source_id"], max_id, delivered=True
+                    )
+                    await db.record_event(
+                        pool, row["owner_tg_id"], "pub", None,
+                        row["dest_chat_id"], row["source_id"],
                     )
                 except Exception as exc:  # noqa: BLE001
                     await db.release_tg_message(pool, row["source_id"], rep_id)

@@ -27,6 +27,36 @@ userbot_alive = False
 userbot_error = None   # human-readable reason when alive=False
 
 
+async def resume_watch(pool, bot) -> None:
+    """Runs once a minute: notify the owner about any source whose timed pause
+    just elapsed (so it silently came back on its own), then trim old history
+    rows so the events table never grows without bound."""
+    from app.i18n import t as _t
+    try:
+        due = await db.due_resume_notices(pool)
+    except Exception as exc:
+        log.warning("resume_watch: due_resume_notices failed: %s", exc)
+        due = []
+    for row in due:
+        try:
+            owner = row["owner_tg_id"]
+            lang = row["owner_lang"] or "en"
+            label = row["source_label"] or ""
+            await bot.send_message(
+                owner, _t(lang, "src_auto_resumed", name=label))
+        except Exception as exc:
+            log.warning("resume_watch: notify failed: %s", exc)
+        finally:
+            try:
+                await db.clear_resume_notice(pool, row["source_id"])
+            except Exception as exc:
+                log.warning("resume_watch: clear_resume_notice failed: %s", exc)
+    try:
+        await db.prune_events(pool, 30)
+    except Exception as exc:
+        log.warning("resume_watch: prune_events failed: %s", exc)
+
+
 def _is_session_fatal(exc):
     """Return True if this exception means the StringSession is permanently
     dead and can never connect again."""
@@ -129,6 +159,10 @@ async def main() -> None:
     dp["reader"] = reader
     dp["pool"] = pool
     dp["client"] = client
+
+    # Watch for timed pauses that have elapsed: notify the owner and prune
+    # old history. Needs the live bot instance, so start it here.
+    scheduling.start_resume_watch(resume_watch, [pool, bot], minutes=1)
 
     await dp.start_polling(bot)
 
