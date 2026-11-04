@@ -7,7 +7,7 @@ from app import db
 from app import dedup
 from app import trace
 from app.formatting import matches_ad_filter
-from app.publisher import publish_tg, publish_tg_album
+from app.publisher import publish_tg, publish_tg_album, _message_text
 
 log = logging.getLogger("backfill")
 
@@ -190,7 +190,7 @@ async def _backfill_one(pool, client, chat_id, dest_rows):
             # Runtime ad filter: skip a recovered post/album whose text matches
             # one of the owner's block patterns.
             if r["ad_filter_enabled"]:
-                item_text = " ".join(m.message or "" for m in item)
+                item_text = " ".join(_message_text(m) for m in item)
                 patterns = await db.get_ad_patterns(pool, r["owner_tg_id"])
                 if matches_ad_filter(item_text, patterns):
                     log.info(
@@ -211,7 +211,7 @@ async def _backfill_one(pool, client, chat_id, dest_rows):
             # pass the gate for the same story.
             if r["dedup_enabled"] and dedup.is_duplicate(
                 r["dest_chat_id"],
-                " ".join(m.message or "" for m in item),
+                " ".join(_message_text(m) for m in item),
                 r["dedup_window_min"],
                 r["dedup_threshold"],
                 r["dedup_min_len"],
@@ -220,7 +220,7 @@ async def _backfill_one(pool, client, chat_id, dest_rows):
                     "dedup: skip backfill src=%s ids=%s-%s -> dest=%s",
                     chat_id, rep_id, max_id, r["dest_chat_id"],
                 )
-                trace.post_drop(chat_id, r["dest_chat_id"], rep_id, "dedup", " ".join(m.message or "" for m in item))
+                trace.post_drop(chat_id, r["dest_chat_id"], rep_id, "dedup", " ".join(_message_text(m) for m in item))
                 await db.record_event(
                     pool, r["owner_tg_id"], "drop", "dedup",
                     r["dest_chat_id"], r["source_id"],

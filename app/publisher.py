@@ -14,6 +14,42 @@ from app import trace
 
 log = logging.getLogger("publisher")
 
+
+def _message_text(message):
+    """Return the human-readable text of a Telegram message, checking every
+    place Telegram can store it.
+
+    Order of preference:
+      1. ``message.message`` -- plain text posts and ShortMessage text.
+      2. ``message.media.caption`` -- text attached to a photo / video /
+         document / gif / audio (this is the case the old code missed).
+      3. A rendered text for ShortMessage content (rare, but present).
+
+    Returns an empty string when the message genuinely has no text; the caller
+    still guards against truly empty posts.
+    """
+    # 1. plain text body
+    txt = getattr(message, "message", None)
+    if txt:
+        return txt
+
+    # 2. media caption (photo / video / document / gif / audio ...)
+    media = getattr(message, "media", None)
+    caption = getattr(media, "caption", None) if media is not None else None
+    if caption:
+        return caption
+
+    # 3. ShortMessage-style content (``action`` holds the rendered text)
+    action = getattr(message, "action", None)
+    if action is not None:
+        for attr in ("message", "text", "title"):
+            val = getattr(action, attr, None)
+            if val:
+                return val
+
+    return ""
+
+
 SEP = "<code>\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500</code>"
 
 # Resolved input entities are cached in memory so we don't call GetDialogs on
@@ -384,11 +420,21 @@ async def publish_tg(client, dest_chat_id, meta, message):
     )
 
     dest = await resolve_dest(client, dest_chat_id, meta.get("dest_username"))
-    body = strip_source_signature(message.message or "")
+
+    # --- Text resolution (caption fallback fix).
+    # A Telegram post can carry its text in message.message (plain text) OR in
+    # message.media.caption (text attached to a photo/video/document/gif). The
+    # original code read ONLY message.message, so a media post with a caption
+    # was seen as empty -- it logged an empty body and then got dropped by the
+    # STEP3b guard below, which is why caption-bearing posts silently vanished.
+    # We now fall back through every caption location before giving up, so the
+    # caption text is published and the post is no longer treated as empty.
+    raw_text = _message_text(message)
+    body = strip_source_signature(raw_text)
 
     # Trace: detect empty-body posts (diagnostic for the empty-post issue).
     if not body.strip():
-        trace.post_empty(src_username or src_tg_id, dest_chat_id, msg_id, message.message or "")
+        trace.post_empty(src_username or src_tg_id, dest_chat_id, msg_id, raw_text)
     else:
         trace.post_recv(src_username or src_tg_id, dest_chat_id, msg_id, body, via="live")
 
@@ -398,6 +444,12 @@ async def publish_tg(client, dest_chat_id, meta, message):
     # post (the link is already in the body).
     is_webpage = isinstance(message.media, MessageMediaWebPage)
     has_file = bool(message.media) and not is_webpage
+    # Treat a media item that carries a caption as attachable media too, so a
+    # caption-bearing photo/video/document is never mistaken for an empty post.
+    if not has_file and message.media is not None:
+        cap = getattr(message.media, "caption", None)
+        if cap:
+            has_file = True
     log.info(
         "%s STEP3 media: has_media=%s is_webpage=%s -> send_as_file=%s",
         tag, bool(message.media), is_webpage, has_file,
@@ -416,7 +468,7 @@ async def publish_tg(client, dest_chat_id, meta, message):
         )
         trace.post_drop(
             src_username or src_tg_id, dest_chat_id, msg_id,
-            reason="empty_no_media", text_preview=message.message or "",
+            reason="empty_no_media", text_preview=raw_text,
         )
         return
 
@@ -524,11 +576,13 @@ async def publish_tg_album(client, dest_chat_id, meta, messages):
     will_hyperlink = bool(source_link) and link_title and show_title
 
     # The caption is whichever album item actually carries text (Telegram puts
-    # the album's text on exactly one of the items).
+    # the album's text on exactly one of the items). We use the same caption
+    # fallback as single posts so an item whose text lives in media.caption is
+    # not missed.
     raw_caption = ""
     for m in messages:
-        if (m.message or "").strip():
-            raw_caption = m.message
+        if _message_text(m).strip():
+            raw_caption = _message_text(m)
             break
     body = strip_source_signature(raw_caption)
     caption = body + source_line

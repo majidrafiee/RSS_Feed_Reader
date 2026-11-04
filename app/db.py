@@ -94,6 +94,24 @@ CREATE UNIQUE INDEX IF NOT EXISTS idx_adfilters_owner_pattern
 CREATE INDEX IF NOT EXISTS idx_adfilters_owner
     ON ad_filters (owner_tg_id);
 
+-- Owner-managed synonym dictionary used by dedup normalisation. Each row maps
+-- an alternate spelling (`word`) to its canonical form (`canonical`), e.g.
+-- "هست" -> "است". Applied as whole-word replacements before comparison, so two
+-- spellings of the same word collapse to one token and near-duplicate re-posts
+-- are caught. Seeded additively on first boot (ON CONFLICT DO NOTHING) with a
+-- handful of common Persian pairs; the owner can add/remove at runtime.
+CREATE TABLE IF NOT EXISTS synonyms (
+    id          BIGSERIAL PRIMARY KEY,
+    owner_tg_id BIGINT NOT NULL,
+    word        TEXT NOT NULL,
+    canonical   TEXT NOT NULL,
+    created_at  TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_synonyms_owner_word
+    ON synonyms (owner_tg_id, word);
+CREATE INDEX IF NOT EXISTS idx_synonyms_owner
+    ON synonyms (owner_tg_id);
+
 -- Near-duplicate suppression. The owner can toggle it, and tune the lookback
 -- window (minutes), similarity threshold (percent) and the minimum caption
 -- length below which dedup is skipped. All comparison is lexical and done in
@@ -286,6 +304,98 @@ async def get_ad_patterns(pool, owner):
             "SELECT pattern FROM ad_filters WHERE owner_tg_id = $1", owner
         )
     return [r["pattern"] for r in rows]
+
+
+# ---------- dedup synonym dictionary ----------
+# Default seeds: (alternate spelling, canonical). Applied as whole-word
+# replacements during dedup normalisation. Kept in code so a fresh DB is
+# seeded automatically; also editable by the owner at runtime.
+DEFAULT_SYNONYMS = [
+    ("هست", "است"),
+    ("تبلیغات", "تبلیغ"),
+    ("پهباد", "پهپاد"),
+    ("امریکا", "آمریکا"),
+]
+
+
+async def seed_default_synonyms(pool, owner=None):
+    """Additively seed the default synonym pairs for an owner (or all owners).
+
+    Uses ON CONFLICT DO NOTHING so it never overwrites a pair the owner has
+    already customised or removed. Safe to call on every boot.
+    """
+    if owner is None:
+        return
+    async with pool.acquire() as con:
+        for word, canon in DEFAULT_SYNONYMS:
+            await con.execute(
+                "INSERT INTO synonyms (owner_tg_id, word, canonical) "
+                "VALUES ($1, $2, $3) ON CONFLICT (owner_tg_id, word) DO NOTHING",
+                owner, word, canon,
+            )
+
+
+async def get_synonyms(pool, owner):
+    """List of (word, canonical) tuples for this owner, oldest first."""
+    if owner is None:
+        return []
+    async with pool.acquire() as con:
+        rows = await con.fetch(
+            "SELECT word, canonical FROM synonyms WHERE owner_tg_id = $1 "
+            "ORDER BY id",
+            owner,
+        )
+    return [(r["word"], r["canonical"]) for r in rows]
+
+
+async def add_synonym(pool, owner, word, canonical):
+    """Add or update one synonym pair (upsert), returning the row."""
+    if owner is None:
+        return None
+    word = (word or "").strip()
+    canonical = (canonical or "").strip()
+    if not word or not canonical:
+        return None
+    async with pool.acquire() as con:
+        return await con.fetchrow(
+            "INSERT INTO synonyms (owner_tg_id, word, canonical) "
+            "VALUES ($1, $2, $3) "
+            "ON CONFLICT (owner_tg_id, word) DO UPDATE "
+            "SET canonical = EXCLUDED.canonical RETURNING *",
+            owner, word, canonical,
+        )
+
+
+async def delete_synonym(pool, owner, word):
+    """Remove one synonym pair by its alternate spelling."""
+    if owner is None:
+        return None
+    async with pool.acquire() as con:
+        return await con.fetchrow(
+            "DELETE FROM synonyms WHERE owner_tg_id = $1 AND word = $2 "
+            "RETURNING *",
+            owner, (word or "").strip(),
+        )
+
+
+async def load_all_synonyms(pool):
+    """Every synonym pair across all owners, for the module-level dedup cache.
+
+    Dedup runs deep in the hot path and must stay synchronous, so the live
+    dictionary is a module-level cache in app.dedup; this returns the union of
+    all owners' pairs so two feeds serving the same destination still fold
+    spellings consistently.
+    """
+    async with pool.acquire() as con:
+        rows = await con.fetch("SELECT word, canonical FROM synonyms ORDER BY id")
+    return [(r["word"], r["canonical"]) for r in rows]
+
+
+async def all_owners(pool):
+    """Distinct owner ids that have a settings row (used to seed defaults)."""
+    async with pool.acquire() as con:
+        rows = await con.fetch("SELECT tg_user_id FROM user_settings")
+    return [r["tg_user_id"] for r in rows]
 
 
 # ---------- destinations ----------

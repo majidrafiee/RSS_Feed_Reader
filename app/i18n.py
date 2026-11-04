@@ -201,6 +201,53 @@ T = {
             "Shortest caption to check.\n\n"
             "<i>Posts shorter than this are never treated as duplicates.</i>"
         ),
+        "btn_dedup_window_halfday": "\U0001F552 12 h (half-day)",
+        "btn_dedup_window_day": "\U0001F4C5 24 h (full day)",
+        "btn_dedup_manual": "\u270D\uFE0F Enter a custom value",
+        "btn_dedup_synonyms": "\U0001F4DA Synonyms: {n}",
+        "btn_dedup_syn_add": "\u2795 Add a synonym",
+        "btn_dedup_syn_row": "\U0001F5D1 {word} \u2192 {to}",
+        "dedup_title_ext": (
+            "\n\n<i>Two signals are compared and the STRONGER is used: word "
+            "order AND word content. One button cycles the threshold; higher "
+            "= looser (keeps more), lower = stricter (drops more). 85 is the "
+            "default; 75\u201392 is the usual range.</i>"
+        ),
+        "dedup_choose_threshold_ext": (
+            "\n\n<i>One number, applied to the stronger of the two signals "
+            "(the order-aware and the order-free comparison). Higher = looser "
+            "(only near-identical re-posts dropped); lower = stricter. "
+            "Default 85.</i>"
+        ),
+        "dedup_choose_window_ext": (
+            "\n\n<i>Presets plus custom. Your destination keeps ONE shared "
+            "look-back, so the same story coming from two different sources "
+            "is also caught.</i>"
+        ),
+        "dedup_manual_prompt": "Send a number for <b>{what}</b>.\n\nRange: <b>{lo}\u2013{hi}</b>. Send /cancel to abort.",
+        "dedup_manual_bad": "\u26A0\uFE0F That is not a whole number in range {lo}\u2013{hi}. Try again, or send /cancel.",
+        "dedup_manual_ok": "\u2705 {what} set to <b>{val}</b>.",
+        "dedup_what_window": "look-back window (minutes)",
+        "dedup_what_threshold": "similarity threshold (percent)",
+        "dedup_what_minlen": "minimum length (characters)",
+        "dedup_syn_title": (
+            "\U0001F4DA <b>Synonym dictionary</b>\n\n"
+            "Spellings that should be treated as the SAME word when comparing "
+            "posts, e.g. <code>\u0647\u0633\u062a → \u0627\u0633\u062a</code> and "
+            "<code>\u062a\u0628\u0644\u06cc\u063a\u0627\u062a → \u062a\u0628\u0644\u06cc\u063a</code>.\n\n"
+            "Tap a row to delete it, or add a new pair. Changes apply to new "
+            "posts immediately (the look-back is always cross-source)."
+        ),
+        "dedup_syn_empty": "<i>No synonyms yet \u2014 tap \u201cAdd a synonym\u201d.</i>",
+        "dedup_syn_add_prompt": (
+            "Send the pair as <b>from = to</b> (or <b>from, to</b>), e.g.\n\n"
+            "<code>\u0647\u0633\u062a = \u0627\u0633\u062a</code>\n\n"
+            "Send /cancel to abort."
+        ),
+        "dedup_syn_add_bad": "\u26A0\uFE0F Could not read that. Use <b>from = to</b>, e.g. <code>\u0647\u0633\u062a = \u0627\u0633\u062a</code>.",
+        "dedup_syn_added": "\u2705 Added <code>{word} → {to}</code>.",
+        "dedup_syn_deleted": "\U0001F5D1 Removed <code>{word}</code>.",
+        "btn_dedup_syn_cancel": "\u274C Cancel",
         "on": "ON",
         "off": "OFF",
         "btn_status": "\U0001F4CA Status",
@@ -444,6 +491,28 @@ T = {
         "dedup_choose_window": "\u062a\u0627 \u0686\u0646\u062f \u062f\u0642\u06cc\u0642\u0647 \u0642\u0628\u0644 \u0628\u0631\u0627\u06cc \u06cc\u0627\u0641\u062a\u0646 \u062a\u06a9\u0631\u0627\u0631\u06cc\u200c\u0647\u0627 \u0628\u0631\u0631\u0633\u06cc \u0634\u0648\u062f\u061f\n\n<i>\u0641\u0642\u0637 \u067e\u0633\u062a\u200c\u0647\u0627\u06cc N \u062f\u0642\u06cc\u0642\u0647 \u0627\u062e\u06cc\u0631 \u0645\u0642\u0627\u06cc\u0633\u0647 \u0645\u06cc\u200c\u0634\u0648\u0646\u062f.</i>",
         "dedup_choose_threshold": "\u062f\u0648 \u067e\u0633\u062a \u0686\u0642\u062f\u0631 \u0628\u0627\u06cc\u062f \u0634\u0628\u06cc\u0647 \u0628\u0627\u0634\u0646\u062f \u062a\u0627 \u062a\u06a9\u0631\u0627\u0631\u06cc \u0645\u062d\u0633\u0648\u0628 \u0634\u0648\u0646\u062f\u061f\n\n<i>\u0628\u0627\u0644\u0627\u062a\u0631 = \u0633\u062e\u062a\u200c\u06af\u06cc\u0631\u0627\u0646\u0647\u200c\u062a\u0631 (\u0641\u0642\u0637 \u067e\u0633\u062a\u200c\u0647\u0627\u06cc \u062a\u0642\u0631\u06cc\u0628\u0627\u064b \u06cc\u06a9\u0633\u0627\u0646 \u062d\u0630\u0641 \u0645\u06cc\u200c\u0634\u0648\u0646\u062f).</i>",
         "dedup_choose_minlen": "\u06a9\u0648\u062a\u0627\u0647\u200c\u062a\u0631\u06cc\u0646 \u0645\u062a\u0646\u06cc \u06a9\u0647 \u0628\u0631\u0631\u0633\u06cc \u0634\u0648\u062f.\n\n<i>\u067e\u0633\u062a\u200c\u0647\u0627\u06cc \u06a9\u0648\u062a\u0627\u0647\u200c\u062a\u0631 \u0627\u0632 \u0627\u06cc\u0646 \u0647\u0631\u06af\u0632 \u062a\u06a9\u0631\u0627\u0631\u06cc \u062f\u0631 \u0646\u0638\u0631 \u06af\u0631\u0641\u062a\u0647 \u0646\u0645\u06cc\u200c\u0634\u0648\u0646\u062f.</i>",
+        "btn_dedup_window_halfday": "🕒 ۱۲ ساعت (نیم‌روز)",
+        "btn_dedup_window_day": "📅 ۲۴ ساعت (یک روز)",
+        "btn_dedup_manual": "✍️ ورود مقدار دلخواه",
+        "btn_dedup_synonyms": "📚 مترادف‌ها: {n}",
+        "btn_dedup_syn_add": "➕ افزودن مترادف",
+        "btn_dedup_syn_row": "🗑 {word} → {to}",
+        "dedup_title_ext": "\n\n<i>دو سیگنال مقایسه می‌شود و قوی‌ترین استفاده می‌شود: ترتیب و محتوای واژه‌ها. یک دکمه آستانه را دور می‌زند؛ بالاتر = شل‌تر (بیشتر نگه می‌دارد)، پایین‌تر = سخت‌گیرانه‌تر (بیشتر حذف می‌کند). پیش‌فرض ۸۵ است؛ بازه معمول ۷۵ تا ۹۲.</i>",
+        "dedup_choose_threshold_ext": "\n\n<i>یک عدد که روی قوی‌ترین سیگنال (مقایسه با ترتیب و بدون ترتیب) اعمال می‌شود. بالاتر = شل‌تر؛ پایین‌تر = سخت‌گیرانه‌تر. پیش‌فرض ۸۵.</i>",
+        "dedup_choose_window_ext": "\n\n<i>انتخاب‌های آماده به‌علاوه مقدار دلخواه. هر مقصد یک بازه مشترک دارد، پس همان خبر از دو منبع مختلف هم گرفته می‌شود.</i>",
+        "dedup_manual_prompt": "یک عدد برای <b>{what}</b> بفرستید.\n\nبازه: <b>{lo}–{hi}</b>. برای لغو /cancel بفرستید.",
+        "dedup_manual_bad": "⚠️ عدد صحیح در بازه {lo}–{hi} نیست. دوباره تلاش کنید یا /cancel.",
+        "dedup_manual_ok": "✅ {what} روی <b>{val}</b> تنظیم شد.",
+        "dedup_what_window": "بازه بررسی (دقیقه)",
+        "dedup_what_threshold": "آستانه شباهت (درصد)",
+        "dedup_what_minlen": "حداقل طول (کاراکتر)",
+        "dedup_syn_title": "📚 <b>دیکشنری مترادف‌ها</b>\n\nاملاهایی که باید هنگام مقایسه یکسان در نظر گرفته شوند، مانند <code>هست → است</code> و <code>تبلیغات → تبلیغ</code>.\n\nبرای حذف روی هر ردیف بزنید، یا یک جفت جدید اضافه کنید. تغییرات فوراً روی پست‌های جدید اعمال می‌شود.",
+        "dedup_syn_empty": "<i>هنوز مترادفی نیست — روی «افزودن مترادف» بزنید.</i>",
+        "dedup_syn_add_prompt": "جفت را به شکل <b>از = به</b> (یا <b>از، به</b>) بفرستید، مثال:\n\n<code>هست = است</code>\n\nبرای لغو /cancel بفرستید.",
+        "dedup_syn_add_bad": "⚠️ نتوانستم بخوانم. از <b>از = به</b> استفاده کنید، مثال <code>هست = است</code>.",
+        "dedup_syn_added": "✅ اضافه شد <code>{word} → {to}</code>.",
+        "dedup_syn_deleted": "🗑 حذف شد <code>{word}</code>.",
+        "btn_dedup_syn_cancel": "❌ لغو",
         "on": "\u0631\u0648\u0634\u0646",
         "off": "\u062E\u0627\u0645\u0648\u0634",
         "btn_status": "\U0001F4CA \u0648\u0636\u0639\u06cc\u062a",

@@ -9,6 +9,7 @@ from telethon import TelegramClient
 from telethon.sessions import StringSession
 
 from app import config, db, scheduling
+from app import dedup
 from app.backfill import backfill_tg_sources
 from app.bot import router
 from app.logconf import setup as _log_setup
@@ -82,6 +83,20 @@ async def main() -> None:
     pool = await db.create_pool()
     await db.init_db(pool)
     log.info("Database ready.")
+
+    # --- Load the owner-managed synonym dictionary into the in-memory dedup
+    # normaliser. If a fresh DB has no pairs yet, seed the sensible defaults
+    # for every known owner (additive; never overwrites edited pairs).
+    try:
+        pairs = await db.load_all_synonyms(pool)
+        if not pairs:
+            for owner in await db.all_owners(pool):
+                await db.seed_default_synonyms(pool, owner)
+            pairs = await db.load_all_synonyms(pool)
+        dedup.set_synonyms(pairs or None)
+        log.info("Synonym dictionary ready (%d pair(s)).", len(pairs or []))
+    except Exception as exc:  # noqa: BLE001
+        log.warning("Could not load synonym dictionary: %s", exc)
 
     # --- Try to start the Telethon userbot. If the StringSession is dead
     # (AuthKeyDuplicatedError / any auth-key error), we log a clear message

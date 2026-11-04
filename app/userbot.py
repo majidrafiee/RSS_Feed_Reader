@@ -6,7 +6,7 @@ from app import db
 from app import dedup
 from app import trace
 from app.formatting import matches_ad_filter
-from app.publisher import publish_tg, publish_tg_album
+from app.publisher import publish_tg, publish_tg_album, _message_text
 
 log = logging.getLogger("userbot")
 
@@ -49,6 +49,10 @@ def register_userbot(client, pool):
             # channels the user actually configured as sources are logged at
             # INFO — everything else is quiet debug.
             rows = await db.destinations_for_tg_source(pool, chat_id)
+            # Full readable text of this post (plain text OR media caption).
+            # Used by the ad-filter and dedup checks so a caption-bearing post
+            # is filtered/deduped on its real text instead of an empty string.
+            live_text = _message_text(event.message)
             if not rows:
                 log.debug(
                     "IN ignore unconfigured chat_id=%s username=%r title=%r "
@@ -104,7 +108,7 @@ def register_userbot(client, pool):
                         "skipping forwarded post from %s -> dest %s",
                         chat_id, row["dest_chat_id"],
                     )
-                    trace.post_drop(chat_id, row["dest_chat_id"], msg_id, "forwarded", event.message.message or "")
+                    trace.post_drop(chat_id, row["dest_chat_id"], msg_id, "forwarded", live_text)
                     await db.record_event(
                         pool, row["owner_tg_id"], "drop", "forwarded",
                         row["dest_chat_id"], row["source_id"],
@@ -118,7 +122,7 @@ def register_userbot(client, pool):
                         "paused: skip post msg=%s from %s -> dest %s",
                         msg_id, chat_id, row["dest_chat_id"],
                     )
-                    trace.post_drop(chat_id, row["dest_chat_id"], msg_id, "paused", event.message.message or "")
+                    trace.post_drop(chat_id, row["dest_chat_id"], msg_id, "paused", live_text)
                     await db.record_event(
                         pool, row["owner_tg_id"], "drop", "paused",
                         row["dest_chat_id"], row["source_id"],
@@ -131,12 +135,12 @@ def register_userbot(client, pool):
                     patterns = await db.get_ad_patterns(
                         pool, row["owner_tg_id"]
                     )
-                    if matches_ad_filter(event.message.message or "", patterns):
+                    if matches_ad_filter(live_text, patterns):
                         log.info(
                             "ad-filter: skip post msg=%s from %s -> dest %s",
                             msg_id, chat_id, row["dest_chat_id"],
                         )
-                        trace.post_drop(chat_id, row["dest_chat_id"], msg_id, "ad-filter", event.message.message or "")
+                        trace.post_drop(chat_id, row["dest_chat_id"], msg_id, "ad-filter", live_text)
                         await db.record_event(
                             pool, row["owner_tg_id"], "drop", "ad-filter",
                             row["dest_chat_id"], row["source_id"],
@@ -149,7 +153,7 @@ def register_userbot(client, pool):
                 # matches something recently published to this destination.
                 if row["dedup_enabled"] and dedup.is_duplicate(
                     row["dest_chat_id"],
-                    event.message.message or "",
+                    live_text,
                     row["dedup_window_min"],
                     row["dedup_threshold"],
                     row["dedup_min_len"],
@@ -158,7 +162,7 @@ def register_userbot(client, pool):
                         "dedup: skip post msg=%s from %s -> dest %s",
                         msg_id, chat_id, row["dest_chat_id"],
                     )
-                    trace.post_drop(chat_id, row["dest_chat_id"], msg_id, "dedup", event.message.message or "")
+                    trace.post_drop(chat_id, row["dest_chat_id"], msg_id, "dedup", live_text)
                     await db.record_event(
                         pool, row["owner_tg_id"], "drop", "dedup",
                         row["dest_chat_id"], row["source_id"],
@@ -277,7 +281,7 @@ def register_userbot(client, pool):
                 # Runtime ad filter: skip the whole album when its caption
                 # matches one of the owner's block patterns.
                 if row["ad_filter_enabled"]:
-                    album_text = " ".join(m.message or "" for m in msgs)
+                    album_text = " ".join(_message_text(m) for m in msgs)
                     patterns = await db.get_ad_patterns(
                         pool, row["owner_tg_id"]
                     )
@@ -298,7 +302,7 @@ def register_userbot(client, pool):
                 # Near-duplicate suppression for the album caption.
                 if row["dedup_enabled"] and dedup.is_duplicate(
                     row["dest_chat_id"],
-                    " ".join(m.message or "" for m in msgs),
+                    " ".join(_message_text(m) for m in msgs),
                     row["dedup_window_min"],
                     row["dedup_threshold"],
                     row["dedup_min_len"],
@@ -307,7 +311,7 @@ def register_userbot(client, pool):
                         "dedup: skip album ids=%s-%s from %s -> dest %s",
                         rep_id, max_id, chat_id, row["dest_chat_id"],
                     )
-                    trace.post_drop(chat_id, row["dest_chat_id"], rep_id, "dedup", " ".join(m.message or "" for m in msgs))
+                    trace.post_drop(chat_id, row["dest_chat_id"], rep_id, "dedup", " ".join(_message_text(m) for m in msgs))
                     await db.record_event(
                         pool, row["owner_tg_id"], "drop", "dedup",
                         row["dest_chat_id"], row["source_id"],

@@ -286,9 +286,23 @@ def ad_clean_confirm_kb(lang: str = "en") -> InlineKeyboardMarkup:
     )
 
 
-DEDUP_WINDOWS = [15, 30, 60, 180, 360]
-DEDUP_THRESHOLDS = [50, 55, 60, 65, 70, 75, 80, 85, 90, 95]
+# Similarity thresholds, as PERCENT. ONE button cycles through these; the
+# comparison itself is a single "is max-of-signals >= threshold?" check. Higher
+# = looser (keeps more, drops only near-identical re-posts); lower = stricter
+# (drops more aggressively). 85 is the sane default; the 75-92 band is the
+# practical range. The cycle is deliberately coarse so a stray tap can't put
+# the setting somewhere silly.
+DEDUP_THRESHOLDS = [60, 75, 80, 85, 90, 95]
+# Lookback window presets, in MINUTES. Includes Half-day (720) and Day (1440)
+# alongside the short windows, so long-running stories are still caught.
+DEDUP_WINDOWS = [15, 30, 60, 180, 360, 720, 1440]
+# Minimum caption length (characters) below which a post is never treated as a
+# duplicate (too short to judge reliably).
 DEDUP_MIN_LENS = [10, 20, 40, 80]
+# Manual-entry bounds, enforced when the owner types a custom value.
+DEDUP_WINDOW_MIN, DEDUP_WINDOW_MAX = 1, 1440
+DEDUP_THRESHOLD_MIN, DEDUP_THRESHOLD_MAX = 60, 99
+DEDUP_MINLEN_MIN, DEDUP_MINLEN_MAX = 5, 200
 
 
 def _dedup_flag(settings, name, default):
@@ -299,6 +313,16 @@ def _dedup_flag(settings, name, default):
     return default if val is None else val
 
 
+def _synonym_count(settings):
+    """Number of owner synonym pairs, when the settings row carries it.
+    Falls back to 0 so the menu still renders before the count is loaded."""
+    try:
+        val = settings["synonym_count"]
+    except (KeyError, IndexError):
+        return 0
+    return 0 if val is None else int(val)
+
+
 def dedup_kb(settings, lang: str = "en") -> InlineKeyboardMarkup:
     """Duplicate-filter menu: on/off toggle plus the three tunable knobs
     (lookback window, similarity threshold, minimum length)."""
@@ -306,6 +330,7 @@ def dedup_kb(settings, lang: str = "en") -> InlineKeyboardMarkup:
     window = _dedup_flag(settings, "dedup_window_min", 30)
     threshold = _dedup_flag(settings, "dedup_threshold", 90)
     min_len = _dedup_flag(settings, "dedup_min_len", 20)
+    syn_count = _synonym_count(settings)
     toggle_key = "btn_dedup_on" if enabled else "btn_dedup_off"
     rows = [
         [InlineKeyboardButton(text=t(lang, toggle_key), callback_data="dedup_toggle")],
@@ -318,6 +343,9 @@ def dedup_kb(settings, lang: str = "en") -> InlineKeyboardMarkup:
         [InlineKeyboardButton(
             text=t(lang, "btn_dedup_minlen", n=min_len),
             callback_data="dedup_set_minlen")],
+        [InlineKeyboardButton(
+            text=t(lang, "btn_dedup_synonyms", n=syn_count),
+            callback_data="dedup_synonyms")],
         [InlineKeyboardButton(text=t(lang, "btn_back"), callback_data="settings")],
     ]
     return InlineKeyboardMarkup(inline_keyboard=rows)
@@ -325,18 +353,31 @@ def dedup_kb(settings, lang: str = "en") -> InlineKeyboardMarkup:
 
 def dedup_window_kb(lang: str = "en") -> InlineKeyboardMarkup:
     rows = [[InlineKeyboardButton(
-        text=t(lang, "btn_dedup_window_opt", min=m),
+        text=_window_label(m, lang),
         callback_data=f"dedup_window:{m}")] for m in DEDUP_WINDOWS]
+    rows.append([InlineKeyboardButton(
+        text=t(lang, "btn_dedup_manual"), callback_data="dedup_manual_window")])
     rows.append([InlineKeyboardButton(text=t(lang, "btn_back"), callback_data="dedup")])
     return InlineKeyboardMarkup(inline_keyboard=rows)
 
 
+def _window_label(minutes, lang="en"):
+    """Nice label for a window preset: minutes, or a words-for-day fraction."""
+    if minutes == 720:
+        return t(lang, "btn_dedup_window_halfday")
+    if minutes == 1440:
+        return t(lang, "btn_dedup_window_day")
+    return t(lang, "btn_dedup_window_opt", min=minutes)
+
+
 def dedup_threshold_kb(lang: str = "en") -> InlineKeyboardMarkup:
-    # Lay the options out two-per-row so a long list (50%..95%) stays compact.
+    # Lay the options out two-per-row so the list stays compact.
     buttons = [InlineKeyboardButton(
         text=t(lang, "btn_dedup_threshold_opt", pct=p),
         callback_data=f"dedup_threshold:{p}") for p in DEDUP_THRESHOLDS]
     rows = [buttons[i:i + 2] for i in range(0, len(buttons), 2)]
+    rows.append([InlineKeyboardButton(
+        text=t(lang, "btn_dedup_manual"), callback_data="dedup_manual_threshold")])
     rows.append([InlineKeyboardButton(text=t(lang, "btn_back"), callback_data="dedup")])
     return InlineKeyboardMarkup(inline_keyboard=rows)
 
@@ -345,8 +386,32 @@ def dedup_minlen_kb(lang: str = "en") -> InlineKeyboardMarkup:
     rows = [[InlineKeyboardButton(
         text=t(lang, "btn_dedup_minlen_opt", n=n),
         callback_data=f"dedup_minlen:{n}")] for n in DEDUP_MIN_LENS]
+    rows.append([InlineKeyboardButton(
+        text=t(lang, "btn_dedup_manual"), callback_data="dedup_manual_minlen")])
     rows.append([InlineKeyboardButton(text=t(lang, "btn_back"), callback_data="dedup")])
     return InlineKeyboardMarkup(inline_keyboard=rows)
+
+
+def dedup_synonyms_kb(pairs, lang: str = "en") -> InlineKeyboardMarkup:
+    """List the owner's synonym pairs, each with a delete button, plus an
+    'add' button. `pairs` is a list of (word, canonical) tuples."""
+    rows = []
+    for word, canonical in pairs:
+        rows.append([InlineKeyboardButton(
+            text=t(lang, "btn_dedup_syn_row", word=word, to=canonical),
+            callback_data=f"dedup_syn_del:{word}")])
+    rows.append([InlineKeyboardButton(
+        text=t(lang, "btn_dedup_syn_add"), callback_data="dedup_syn_add")])
+    rows.append([InlineKeyboardButton(text=t(lang, "btn_back"), callback_data="dedup")])
+    return InlineKeyboardMarkup(inline_keyboard=rows)
+
+
+def dedup_manual_cancel_kb(lang: str = "en") -> InlineKeyboardMarkup:
+    """Small cancel keyboard shown while waiting for a typed value/pair."""
+    return InlineKeyboardMarkup(inline_keyboard=[[
+        InlineKeyboardButton(
+            text=t(lang, "btn_dedup_syn_cancel"), callback_data="dedup"),
+    ]])
 
 
 def interval_kb(lang: str = "en") -> InlineKeyboardMarkup:

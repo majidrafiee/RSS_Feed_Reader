@@ -22,9 +22,17 @@ from app.keyboards import (
     ad_words_kb,
     bulk_pause_kb,
     dedup_kb,
+    dedup_manual_cancel_kb,
     dedup_minlen_kb,
+    dedup_synonyms_kb,
     dedup_threshold_kb,
     dedup_window_kb,
+    DEDUP_WINDOW_MIN,
+    DEDUP_WINDOW_MAX,
+    DEDUP_THRESHOLD_MIN,
+    DEDUP_THRESHOLD_MAX,
+    DEDUP_MINLEN_MIN,
+    DEDUP_MINLEN_MAX,
     destinations_kb,
     dests_manage_kb,
     interval_kb,
@@ -97,6 +105,14 @@ class PauseSource(StatesGroup):
 
 class BulkPause(StatesGroup):
     waiting_minutes = State()
+
+
+class DedupManual(StatesGroup):
+    waiting_value = State()
+
+
+class DedupSynonym(StatesGroup):
+    waiting_pair = State()
 
 
 async def _lang(pool, tg_id, fallback="en"):
@@ -886,34 +902,46 @@ async def cb_lang_chosen(cb: CallbackQuery, pool):
 # ---------------------------------------------------------------------------
 
 
-@router.callback_query(F.data == "dedup")
-async def cb_dedup(cb: CallbackQuery, state: FSMContext, pool):
-    await state.clear()
-    row = await db.get_settings(pool, cb.from_user.id)
-    lang = row["language"]
+async def _dedup_title_text(row, lang):
+    """Render the dedup menu header, including the "higher = looser" hint and
+    the count of owner-managed synonyms (shown on the Synonyms button)."""
     status = t(lang, "on") if row["dedup_enabled"] else t(lang, "off")
-    text = t(
+    base = t(
         lang, "dedup_title",
         status=status,
         min=row["dedup_window_min"],
         pct=row["dedup_threshold"],
         n=row["dedup_min_len"],
     )
+    return base + t(lang, "dedup_title_ext")
+
+
+async def _dedup_row(pool, owner):
+    """Settings row + the owner's synonym count, so the menu button can show
+    how many pairs are configured without a second DB round-trip in the view."""
+    row = dict(await db.get_settings(pool, owner))
+    try:
+        pairs = await db.get_synonyms(pool, owner)
+        row["synonym_count"] = len(pairs)
+    except Exception:  # noqa: BLE001
+        row["synonym_count"] = 0
+    return row
+
+
+@router.callback_query(F.data == "dedup")
+async def cb_dedup(cb: CallbackQuery, state: FSMContext, pool):
+    await state.clear()
+    row = await _dedup_row(pool, cb.from_user.id)
+    lang = row["language"]
+    text = await _dedup_title_text(row, lang)
     await _safe_edit(cb, text, reply_markup=dedup_kb(row, lang))
     await cb.answer()
 
 
 async def _dedup_back(cb: CallbackQuery, pool, note=None):
-    row = await db.get_settings(pool, cb.from_user.id)
+    row = await _dedup_row(pool, cb.from_user.id)
     lang = row["language"]
-    status = t(lang, "on") if row["dedup_enabled"] else t(lang, "off")
-    text = t(
-        lang, "dedup_title",
-        status=status,
-        min=row["dedup_window_min"],
-        pct=row["dedup_threshold"],
-        n=row["dedup_min_len"],
-    )
+    text = await _dedup_title_text(row, lang)
     await _safe_edit(cb, text, reply_markup=dedup_kb(row, lang))
     await cb.answer(note or "")
 
@@ -928,7 +956,8 @@ async def cb_dedup_toggle(cb: CallbackQuery, pool):
 @router.callback_query(F.data == "dedup_set_window")
 async def cb_dedup_set_window(cb: CallbackQuery, pool):
     lang = await _lang(pool, cb.from_user.id)
-    await _safe_edit(cb, t(lang, "dedup_choose_window"), reply_markup=dedup_window_kb(lang))
+    text = t(lang, "dedup_choose_window") + t(lang, "dedup_choose_window_ext")
+    await _safe_edit(cb, text, reply_markup=dedup_window_kb(lang))
     await cb.answer()
 
 
@@ -943,7 +972,8 @@ async def cb_dedup_window_chosen(cb: CallbackQuery, pool):
 @router.callback_query(F.data == "dedup_set_threshold")
 async def cb_dedup_set_threshold(cb: CallbackQuery, pool):
     lang = await _lang(pool, cb.from_user.id)
-    await _safe_edit(cb, t(lang, "dedup_choose_threshold"), reply_markup=dedup_threshold_kb(lang))
+    text = t(lang, "dedup_choose_threshold") + t(lang, "dedup_choose_threshold_ext")
+    await _safe_edit(cb, text, reply_markup=dedup_threshold_kb(lang))
     await cb.answer()
 
 
@@ -968,6 +998,165 @@ async def cb_dedup_minlen_chosen(cb: CallbackQuery, pool):
     await db.set_dedup_min_len(pool, cb.from_user.id, n)
     lang = await _lang(pool, cb.from_user.id)
     await _dedup_back(cb, pool, t(lang, "saved"))
+
+
+# --- Manual value entry (window / threshold / min length) -------------------
+# The preset buttons cover the common cases; these let the owner type an exact
+# number. Bounds are enforced here so a stray value can never break dedup:
+#   window 1-1440 min, threshold 60-99 %, min length 5-200 chars.
+
+@router.callback_query(F.data == "dedup_manual_window")
+async def cb_dedup_manual_window(cb: CallbackQuery, state: FSMContext, pool):
+    lang = await _lang(pool, cb.from_user.id)
+    await state.set_state(DedupManual.waiting_value)
+    await state.update_data(dedup_field="window")
+    await _safe_edit(
+        cb, t(lang, "dedup_manual_prompt",
+              what=t(lang, "dedup_what_window"),
+              lo=DEDUP_WINDOW_MIN, hi=DEDUP_WINDOW_MAX),
+        reply_markup=dedup_manual_cancel_kb(lang),
+    )
+    await cb.answer()
+
+
+@router.callback_query(F.data == "dedup_manual_threshold")
+async def cb_dedup_manual_threshold(cb: CallbackQuery, state: FSMContext, pool):
+    lang = await _lang(pool, cb.from_user.id)
+    await state.set_state(DedupManual.waiting_value)
+    await state.update_data(dedup_field="threshold")
+    await _safe_edit(
+        cb, t(lang, "dedup_manual_prompt",
+              what=t(lang, "dedup_what_threshold"),
+              lo=DEDUP_THRESHOLD_MIN, hi=DEDUP_THRESHOLD_MAX),
+        reply_markup=dedup_manual_cancel_kb(lang),
+    )
+    await cb.answer()
+
+
+@router.callback_query(F.data == "dedup_manual_minlen")
+async def cb_dedup_manual_minlen(cb: CallbackQuery, state: FSMContext, pool):
+    lang = await _lang(pool, cb.from_user.id)
+    await state.set_state(DedupManual.waiting_value)
+    await state.update_data(dedup_field="minlen")
+    await _safe_edit(
+        cb, t(lang, "dedup_manual_prompt",
+              what=t(lang, "dedup_what_minlen"),
+              lo=DEDUP_MINLEN_MIN, hi=DEDUP_MINLEN_MAX),
+        reply_markup=dedup_manual_cancel_kb(lang),
+    )
+    await cb.answer()
+
+
+_DEDUP_MANUAL_SPEC = {
+    "window": ("dedup_what_window", DEDUP_WINDOW_MIN, DEDUP_WINDOW_MAX,
+               db.set_dedup_window),
+    "threshold": ("dedup_what_threshold", DEDUP_THRESHOLD_MIN, DEDUP_THRESHOLD_MAX,
+                  db.set_dedup_threshold),
+    "minlen": ("dedup_what_minlen", DEDUP_MINLEN_MIN, DEDUP_MINLEN_MAX,
+               db.set_dedup_min_len),
+}
+
+
+@router.message(DedupManual.waiting_value)
+async def cb_dedup_manual_value(msg: Message, state: FSMContext, pool):
+    lang = await _lang(pool, msg.from_user.id)
+    data = await state.get_data()
+    field = data.get("dedup_field")
+    spec = _DEDUP_MANUAL_SPEC.get(field)
+    if not spec:
+        await state.clear()
+        return
+    what_key, lo, hi, setter = spec
+    raw = (msg.text or "").strip()
+    # Accept Persian/Arabic digits too, then require a plain integer.
+    raw = raw.translate(str.maketrans("۰۱۲۳۴۵۶۷۸۹", "0123456789"))
+    if not raw.lstrip("-").isdigit():
+        await msg.answer(t(lang, "dedup_manual_bad", lo=lo, hi=hi))
+        return
+    val = int(raw)
+    if val < lo or val > hi:
+        await msg.answer(t(lang, "dedup_manual_bad", lo=lo, hi=hi))
+        return
+    await setter(pool, msg.from_user.id, val)
+    await state.clear()
+    await msg.answer(t(lang, "dedup_manual_ok",
+                         what=t(lang, what_key), val=val))
+    row = await _dedup_row(pool, msg.from_user.id)
+    text = await _dedup_title_text(row, lang)
+    await msg.answer(text, reply_markup=dedup_kb(row, lang))
+
+
+# --- Synonym dictionary management ------------------------------------------
+
+async def _show_synonyms(cb: CallbackQuery, pool, note=None):
+    owner = cb.from_user.id
+    lang = await _lang(pool, owner)
+    pairs = await db.get_synonyms(pool, owner)
+    text = t(lang, "dedup_syn_title")
+    if not pairs:
+        text += "\n\n" + t(lang, "dedup_syn_empty")
+    await _safe_edit(cb, text, reply_markup=dedup_synonyms_kb(pairs, lang))
+    await cb.answer(note or "")
+
+
+@router.callback_query(F.data == "dedup_synonyms")
+async def cb_dedup_synonyms(cb: CallbackQuery, state: FSMContext, pool):
+    await state.clear()
+    await _show_synonyms(cb, pool)
+
+
+@router.callback_query(F.data.startswith("dedup_syn_del:"))
+async def cb_dedup_syn_del(cb: CallbackQuery, pool):
+    word = cb.data.split(":", 1)[1]
+    await db.delete_synonym(pool, cb.from_user.id, word)
+    # Refresh the in-memory dictionary dedup uses, so the removal is immediate.
+    try:
+        pairs = await db.load_all_synonyms(pool)
+        dedup.set_synonyms(pairs or None)
+    except Exception:  # noqa: BLE001
+        pass
+    lang = await _lang(pool, cb.from_user.id)
+    await _show_synonyms(cb, pool, t(lang, "dedup_syn_deleted", word=word))
+
+
+@router.callback_query(F.data == "dedup_syn_add")
+async def cb_dedup_syn_add(cb: CallbackQuery, state: FSMContext, pool):
+    lang = await _lang(pool, cb.from_user.id)
+    await state.set_state(DedupSynonym.waiting_pair)
+    await _safe_edit(
+        cb, t(lang, "dedup_syn_add_prompt"),
+        reply_markup=dedup_manual_cancel_kb(lang),
+    )
+    await cb.answer()
+
+
+@router.message(DedupSynonym.waiting_pair)
+async def cb_dedup_syn_pair(msg: Message, state: FSMContext, pool):
+    lang = await _lang(pool, msg.from_user.id)
+    raw = (msg.text or "").strip()
+    word = to = None
+    if "=" in raw:
+        word, to = raw.split("=", 1)
+    elif "," in raw:
+        word, to = raw.split(",", 1)
+    word = (word or "").strip()
+    to = (to or "").strip()
+    if not word or not to:
+        await msg.answer(t(lang, "dedup_syn_add_bad"))
+        return
+    await db.add_synonym(pool, msg.from_user.id, word, to)
+    try:
+        pairs = await db.load_all_synonyms(pool)
+        dedup.set_synonyms(pairs or None)
+    except Exception:  # noqa: BLE001
+        pass
+    await state.clear()
+    await msg.answer(t(lang, "dedup_syn_added", word=word, to=to))
+    pairs = await db.get_synonyms(pool, msg.from_user.id)
+    text = t(lang, "dedup_syn_title")
+    if not pairs:
+        text += "\n\n" + t(lang, "dedup_syn_empty")
+    await msg.answer(text, reply_markup=dedup_synonyms_kb(pairs, lang))
 
 
 # ---------------------------------------------------------------------------
